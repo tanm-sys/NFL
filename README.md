@@ -4,9 +4,16 @@
 A state-of-the-art implementation for the NFL Big Data Bowl, using **Graph Neural Networks (GNN)**, **Transformers**, and **Strategic Embeddings** to predict player movements and classify defensive coverage.
 
 ## 📚 Documentation
-*   [**System Architecture**](docs/architecture.md): Deep dive into the GNN+Transformer design.
-*   [**Data Dictionary**](docs/data_dictionary.md): Explanation of all input features (Physics + Strategy).
-*   [**Usage Guide**](docs/usage.md): Instructions for Training, Tuning, and Visualization.
+### Core Concepts
+*   [**System Architecture**](docs/architecture.md): Deep dive into the GNN+Transformer design and Tensor Flow.
+*   [**Data Maps**](docs/data_pipeline.md): Visualizing the ETL process and Graph Construction.
+*   [**Data Dictionary**](docs/data_dictionary.md): Reference for all Physics and Strategy features.
+
+### Guides
+*   [**Installation Guide**](docs/installation.md): Environment setup, Virtualenv, and Requirements.
+*   [**Usage & Workflow**](docs/usage.md): How to Train, Visualize, and Deploy.
+*   [**Configuration**](docs/configuration.md): Hyperparameters and CLI Flags.
+*   [**Testing Strategy**](docs/testing.md): Verification scripts and Sanity Checks.
 
 ## 🚀 Quick Start
 ```bash

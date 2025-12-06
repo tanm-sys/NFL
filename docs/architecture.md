@@ -72,9 +72,32 @@ The model uses residual-style fusion to combine specific logic (Nodes) with glob
 *   Transformer Encoder processes the sequence.
 *   Output Head projects to $\Delta x, \Delta y$.
 
-## Data Flow
-1.  **Ingestion**: `DataLoader` reads Weekly Tracking Data + Supplementary Game Data.
-2.  **Filtering**: Removes plays nullified by penalties.
+## Training & Loss Flow
+
+The model optimizes two objectives simultaneously (Multi-Task Learning).
+
+```mermaid
+graph TD
+    subgraph Forward_Pass
+    Batch[Input Batch] --> Model[NFLGraphTransformer]
+    Model --> PredTraj["Trajectory Pred<br/>(x,y)"]
+    Model --> PredCov["Coverage Logits<br/>(Man/Zone)"]
+    end
+
+    subgraph Targets
+    GT_Traj[Ground Truth Path]
+    GT_Cov[Ground Truth Label]
+    end
+
+    subgraph Loss_Calculation
+    PredTraj & GT_Traj --> MSE[MSE Loss]
+    PredCov & GT_Cov --> BCE[BCEWithLogits Loss]
+    
+    MSE --> Weighted sum((+))
+    BCE -- "x 0.5" --> Weighted sum
+    Weighted sum --> TotalLoss[Total Backward Loss]
+    end
+```
 3.  **Feature Engineering**:
     *   Standardizes play direction (Left-to-Right).
     *   Encodes categorical features (Formation, Role) into IDs.

@@ -240,6 +240,17 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
         if ytg is None: ytg = 10
         
         context_tensor = torch.tensor([[down, ytg]], dtype=torch.float) # [1, 2]
+        
+    # Multi-Task Label: Coverage Type
+    coverage_tensor = None
+    if "coverage_label" in df.columns:
+        row = df.select(["coverage_label"]).head(1).to_dict(as_series=False)
+        cov_label = row["coverage_label"][0]
+        
+        if cov_label is not None:
+             coverage_tensor = torch.tensor([cov_label], dtype=torch.float) # [1] float (since BCEWithLogits takes float)
+             # Or Long if CrossEntropy. Binary is simpler with BCE.
+             # Let's use Float [1] for BCE.
     
     for t in range(num_frames - future_seq_len):
         # Current Frame Features
@@ -292,6 +303,10 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
         # Attach Context if available
         if context_tensor is not None:
             data.context = context_tensor # [1, 2]
+            
+        # Attach Coverage Label if available
+        if coverage_tensor is not None:
+            data.y_coverage = coverage_tensor # [1]
             
         graph_list.append(data)
         

@@ -29,12 +29,27 @@ class DataLoader:
         valid_plays = plays_df.filter(pl.col("play_nullified_by_penalty") == "N")
         
         
+        
         # Select context columns
         # absolute_yardline_number might need standardization same as x side
-        context_cols = ["game_id", "play_id", "down", "yards_to_go", "absolute_yardline_number", "possession_team"]
+        context_cols = ["game_id", "play_id", "down", "yards_to_go", "absolute_yardline_number", "possession_team", "team_coverage_man_zone"]
         existing_cols = [c for c in context_cols if c in valid_plays.columns]
         play_context = valid_plays.select(existing_cols)
         
+        # Filter plays with known coverage if we are doing MTL?
+        # Or keep them and mask loss. Let's keep them.
+        
+        # Map Coverage to Int: Man=0, Zone=1, Other=Null
+        # Polars: .with_columns(pl.col("team_coverage_man_zone").map_dict({"MAN_COVERAGE": 0, "ZONE_COVERAGE": 1}))
+        # But handle nulls.
+        
+        play_context = play_context.with_columns(
+            pl.when(pl.col("team_coverage_man_zone") == "MAN_COVERAGE").then(0)
+            .when(pl.col("team_coverage_man_zone") == "ZONE_COVERAGE").then(1)
+            .otherwise(None) # Make sure others are null
+            .alias("coverage_label")
+        )
+
         # 3. Join
         # Tracking data has gameId, playId. Standardize names first if needed.
         if standard_cols:

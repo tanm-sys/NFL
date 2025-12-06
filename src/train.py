@@ -4,8 +4,8 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 import optuna
 from torch_geometric.loader import DataLoader as PyGDataLoader
-from models.gnn import NFLGraphTransformer
-from features import create_graph_data
+from src.models.gnn import NFLGraphTransformer
+from src.features import create_graph_data
 import numpy as np
 
 class NFLGraphPredictor(pl.LightningModule):
@@ -20,28 +20,53 @@ class NFLGraphPredictor(pl.LightningModule):
         
     def training_step(self, batch, batch_idx):
         # batch is a PyG Batch object
-        pred = self(batch)
+        predictions, cov_pred = self(batch)
         
-        # Real Targets
+        # 1. Trajectory Loss (MSE)
         y = batch.y # [Total_Nodes, Future_Seq, 2]
+        loss_traj = F.mse_loss(predictions, y)
+        self.log("train_traj_loss", loss_traj)
         
-        # MSE Loss
-        loss = F.mse_loss(pred, y)
+        # 2. Coverage Loss (BCE)
+        loss_cov = 0.0
+        if hasattr(batch, 'y_coverage') and batch.y_coverage is not None:
+             # y_coverage: [Batch_Size, 1] (Float)
+             target_cov = batch.y_coverage.view(-1, 1)
+             loss_cov = F.binary_cross_entropy_with_logits(cov_pred, target_cov)
+             self.log("train_cov_loss", loss_cov)
+             
+        # Total Loss (Weighted)
+        # Weighting: Tune scalar? Start with 0.5 or 1.0 depending on magnitude.
+        # MSE is approx 0.01~1.0. SCE is 0.6. Scale similar.
+        loss = loss_traj + 0.5 * loss_cov
         self.log("train_loss", loss)
         return loss
         
     def validation_step(self, batch, batch_idx):
-        pred = self(batch)
+        predictions, cov_pred = self(batch)
         y = batch.y
-        loss = F.mse_loss(pred, y)
         
-        # ADE
-        disp = torch.sqrt(torch.sum((pred - y)**2, dim=-1))
+        # Traj Validation
+        loss_traj = F.mse_loss(predictions, y)
+        disp = torch.sqrt(torch.sum((predictions - y)**2, dim=-1))
         ade = torch.mean(disp)
         
-        self.log("val_loss", loss)
+        self.log("val_loss_traj", loss_traj)
         self.log("val_ade", ade)
-        return loss
+        
+        # Coverage Validation
+        if hasattr(batch, 'y_coverage') and batch.y_coverage is not None:
+             target_cov = batch.y_coverage.view(-1, 1)
+             loss_cov = F.binary_cross_entropy_with_logits(cov_pred, target_cov)
+             self.log("val_loss_cov", loss_cov)
+             
+             # Accuracy
+             probs = torch.sigmoid(cov_pred)
+             preds = (probs > 0.5).float()
+             acc = (preds == target_cov).float().mean()
+             self.log("val_cov_acc", acc)
+             
+        return loss_traj # Return primary metric or total loss? Lightning uses this for checkpointing if monitored.
         
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
@@ -74,8 +99,8 @@ def train_model():
     print("Starting training run...")
     # Real implementation would load data here
     # Week 1 for demo
-    from data_loader import DataLoader
-    from features import create_graph_data
+    from src.data_loader import DataLoader
+    from src.features import create_graph_data
     
     loader = DataLoader(".")
     try:

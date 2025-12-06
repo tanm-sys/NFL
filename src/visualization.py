@@ -184,3 +184,80 @@ def animate_play(play_df, output_path="play_animation.mp4"):
         
     plt.close()
     return output_path
+
+def plot_attention_map(frame_df, attn_data, target_nfl_id=None, ax=None):
+    """
+    Visualizes attention weights on the field.
+    attn_data: (edge_index, alpha) tensor tuple from the model.
+               alpha shape [Num_Edges, Heads] -> Mean over heads.
+    target_nfl_id: The 'Observer' node. plot INCOMING attention to this node.
+                   (Because GAT alpha_ij is 'j extends influence to i').
+    """
+    if ax is None:
+        fig, ax = create_football_field()
+        
+    # Plot Base Frame
+    plot_play_frame(frame_df, frame_df['frame_id'][0], ax=ax)
+    
+    # Extract Graph Info
+    edge_index, alpha = attn_data
+    # Convert to numpy
+    edge_index = edge_index.detach().cpu().numpy() # [2, Edges]
+    # Mean attention over heads
+    alpha = alpha.detach().cpu().mean(dim=-1).numpy() # [Edges]
+    
+    # Map nfl_id to Graph Node Index
+    # Graph construction sorts by (frame_id, nfl_id).
+    # Since we are plotting one frame, indices 0..N correspond to sorted nfl_ids in frame_df.
+    sorted_df = frame_df.sort("nfl_id")
+    nfl_ids = sorted_df["nfl_id"].to_list()
+    
+    if target_nfl_id is None:
+        # Default to QB or first player
+        # Try finding QB role?
+        qb_row = sorted_df.filter(pl.col("player_position") == "QB")
+        if len(qb_row) > 0:
+            target_nfl_id = qb_row["nfl_id"][0]
+        else:
+            target_nfl_id = nfl_ids[0]
+            
+    # Find Node Index
+    try:
+        target_idx = nfl_ids.index(target_nfl_id)
+    except ValueError:
+        print(f"Target ID {target_nfl_id} not found in frame.")
+        return ax
+        
+    # Get Player Positions (Sorted order matches Node Index)
+    positions = sorted_df.select(["std_x", "std_y"]).to_numpy() # [N, 2]
+    
+    # Filter Edges: Incoming to Target (j -> target_idx)
+    # edge_index[0] is Source (j), [1] is Target (i)
+    # We want i == target_idx
+    mask = (edge_index[1] == target_idx)
+    
+    start_nodes = edge_index[0][mask]
+    weights = alpha[mask]
+    
+    # Normalize weights for visualization visibility? 
+    # Softmax output sums to 1 per target.
+    # Just clip or scale.
+    weights = weights / weights.max() if weights.max() > 0 else weights
+    
+    target_pos = positions[target_idx]
+    
+    for start_node, w in zip(start_nodes, weights):
+        if w < 0.1: continue # Threshold
+        
+        start_pos = positions[start_node]
+        
+        # Draw Line
+        ax.plot([start_pos[0], target_pos[0]], 
+                [start_pos[1], target_pos[1]], 
+                color='gold', 
+                linewidth=2, 
+                alpha=float(w), 
+                zorder=5)
+                
+    ax.set_title(f"Attention Map for Player {target_nfl_id}")
+    return ax

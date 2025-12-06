@@ -20,7 +20,7 @@ class NFLGraphPredictor(pl.LightningModule):
         
     def training_step(self, batch, batch_idx):
         # batch is a PyG Batch object
-        predictions, cov_pred = self(batch)
+        predictions, cov_pred, _ = self(batch)
         
         # 1. Trajectory Loss (MSE)
         y = batch.y # [Total_Nodes, Future_Seq, 2]
@@ -43,7 +43,7 @@ class NFLGraphPredictor(pl.LightningModule):
         return loss
         
     def validation_step(self, batch, batch_idx):
-        predictions, cov_pred = self(batch)
+        predictions, cov_pred, _ = self(batch)
         y = batch.y
         
         # Traj Validation

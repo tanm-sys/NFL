@@ -222,6 +222,25 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
     IDX_X, IDX_Y = 0, 1
     IDX_DIR = 4 
     
+    # Context Features (Global for this play)
+    # Check if context cols exist (from updated loader)
+    context_tensor = None
+    if "down" in df.columns and "yards_to_go" in df.columns:
+        # Take first row (constant per play)
+        # down is 1-4, ytg is distance. Normalize?
+        # Down: 1-4. YTG: 1-99.
+        # Let's keep raw for embedding or normalize vaguely.
+        # Normalize simple: Down/4, YTG/100
+        row = df.select(["down", "yards_to_go"]).head(1).to_dict(as_series=False)
+        down = row["down"][0]
+        ytg = row["yards_to_go"][0]
+        
+        # Handle NA or casts
+        if down is None: down = 1
+        if ytg is None: ytg = 10
+        
+        context_tensor = torch.tensor([[down, ytg]], dtype=torch.float) # [1, 2]
+    
     for t in range(num_frames - future_seq_len):
         # Current Frame Features
         # [Agents, Feats]
@@ -269,6 +288,11 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
         # Create Data
         # Flatten y? Or keep as tensor? PyG handles any tensor in Data
         data = Data(x=x_t, edge_index=edge_index, edge_attr=edge_attr, y=y_t, pos=pos_t)
+        
+        # Attach Context if available
+        if context_tensor is not None:
+            data.context = context_tensor # [1, 2]
+            
         graph_list.append(data)
         
     return graph_list

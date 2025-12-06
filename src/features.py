@@ -188,128 +188,105 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
     - y: Future trajectory [Num_Agents, Future_Seq, 2]
     - edge_attr: [Num_Edges, 2] (Distance, Relative Angle)
     """
-    # 1. Pivot to [Frames, Agents, Features]
-    feature_cols = ["std_x", "std_y", "s", "a", "std_dir", "std_o", "weight_norm", "role_id"]
-    
-    # Sort
-    df = df.sort(["frame_id", "nfl_id"])
-    pdf = df.to_pandas()
-    # Handle Football NaN nfl_id
-    pdf['nfl_id'] = pdf['nfl_id'].fillna(999999)
-    
-    # helper
-    unique_frames = pdf['frame_id'].unique() # sorted by df sort
-    # verifying timestamps? simpler to assume 10Hz contiguous
-    
-    # Pivot
-    # Multi-index pivot is tricky, stick to list of pivots
-    feature_matrices = []
-    for col in feature_cols:
-        # fillna(0) for missing agents
-        # weight_norm might be missing? fill 0 (mean)
-        # role_id missing? fill 4 (unknown)
-        val_fill = 0
-        if col == "role_id": val_fill = 4
-        
-        pivot = pdf.pivot(index='frame_id', columns='nfl_id', values=col).fillna(val_fill)
-        feature_matrices.append(pivot.values)
-        
-    # Stack: [Frames, Agents, Features]
-    # Features order: x, y, s, a, dir, o, weight, role
-    data_tensor = np.stack(feature_matrices, axis=-1)
-    data_tensor = torch.FloatTensor(data_tensor)
-    
-    num_frames, num_agents, num_feats = data_tensor.shape
-    
     graph_list = []
     
-    # Feature indices
-    IDX_X, IDX_Y = 0, 1
-    IDX_DIR = 4 
+    # Process per play to avoid cross-play contamination
+    play_groups = df.partition_by(["game_id", "play_id"], maintain_order=True)
     
-    # Context Features (Global for this play)
-    context_tensor = None
-    formation_tensor = None
-    alignment_tensor = None
-    
-    if "down" in df.columns and "yards_to_go" in df.columns:
-        cols = ["down", "yards_to_go"]
-        if "defenders_box_norm" in df.columns:
-            cols.append("defenders_box_norm")
+    for play_df in play_groups:
+        # Sort
+        play_df = play_df.sort(["frame_id", "nfl_id"])
+        pdf = play_df.to_pandas()
+        # Handle Football NaN nfl_id
+        pdf['nfl_id'] = pdf['nfl_id'].fillna(999999)
+        
+        # Determine Context (Single row per play)
+        # Context Features (Global for this play)
+        context_tensor = None
+        formation_tensor = None
+        alignment_tensor = None
+        
+        if "down" in play_df.columns and "yards_to_go" in play_df.columns:
+            cols = ["down", "yards_to_go"]
+            if "defenders_box_norm" in play_df.columns:
+                cols.append("defenders_box_norm")
+                
+            row = play_df.select(cols).head(1).to_dict(as_series=False)
+            down = row["down"][0] if row["down"][0] is not None else 1
+            ytg = row["yards_to_go"][0] if row["yards_to_go"][0] is not None else 10
+            box = row["defenders_box_norm"][0] if "defenders_box_norm" in row else 0.0
             
-        row = df.select(cols).head(1).to_dict(as_series=False)
-        down = row["down"][0] if row["down"][0] is not None else 1
-        ytg = row["yards_to_go"][0] if row["yards_to_go"][0] is not None else 10
-        box = row["defenders_box_norm"][0] if "defenders_box_norm" in row else 0.0
-        
-        # Context: [Down, YTG, Box] -> Dim 3
-        context_tensor = torch.tensor([[down, ytg, box]], dtype=torch.float)
-        
-    if "formation_id" in df.columns:
-        fid = df["formation_id"][0]
-        formation_tensor = torch.tensor([fid], dtype=torch.long)
-        
-    if "alignment_id" in df.columns:
-        aid = df["alignment_id"][0]
-        alignment_tensor = torch.tensor([aid], dtype=torch.long)
-        
-    # Multi-Task Label: Coverage Type
-    coverage_tensor = None
-    if "coverage_label" in df.columns:
-        row = df.select(["coverage_label"]).head(1).to_dict(as_series=False)
-        cov_label = row["coverage_label"][0]
-        
-        if cov_label is not None:
-             coverage_tensor = torch.tensor([cov_label], dtype=torch.float) # [1] float (since BCEWithLogits takes float)
-             # Or Long if CrossEntropy. Binary is simpler with BCE.
-             # Let's use Float [1] for BCE.
-    
-    for t in range(num_frames - future_seq_len):
-        # Current Frame Features
-        # [Agents, Feats]
-        # x, y, s, a, dir, o, weight, role
-        curr_t = data_tensor[t] 
-        
-        # Extract Role (Last Col)
-        role_t = curr_t[:, 7].long()
-        
-        # Keep features up to weight (first 7)
-        x_t = curr_t[:, :7] 
-        pos_t = x_t[:, :2] # x, y
-        
-        # Future Targets
-        # [Future, Agents, 2] -> Transpose to [Agents, Future, 2]
-        # range t+1 to t+1+future
-        y_t = data_tensor[t+1 : t+1+future_seq_len, :, :2]
-        y_t = y_t.permute(1, 0, 2) 
-        
-        # Absolute diff targets? Or absolute positions?
-        # Model usually predicts relative to current pos or absolute.
-        # Let's attach Absolute Y.
-        
-        # Edge Creation
-        # Dist Matrix
-        dist_matrix = torch.cdist(pos_t, pos_t) # [Agents, Agents]
-        mask = (dist_matrix < radius) & (dist_matrix > 1e-5)
-        edge_index = mask.nonzero().t() # [2, Num_Edges]
-        
-        row, col = edge_index
-        # Create Data
-        data = Data(x=x_t, edge_index=edge_index, edge_attr=edge_attr, y=y_t, pos=pos_t)
-        
-        # Attach Strategic Features
-        if role_t is not None: data.role = role_t
-        if formation_tensor is not None: data.formation = formation_tensor
-        if alignment_tensor is not None: data.alignment = alignment_tensor
-        
-        # Attach Context if available
-        if context_tensor is not None:
-            data.context = context_tensor # [1, 2]
+            context_tensor = torch.tensor([[down, ytg, box]], dtype=torch.float)
             
-        # Attach Coverage Label if available
-        if coverage_tensor is not None:
-            data.y_coverage = coverage_tensor # [1]
+        if "formation_id" in play_df.columns:
+            fid = play_df["formation_id"][0]
+            formation_tensor = torch.tensor([fid], dtype=torch.long)
             
-        graph_list.append(data)
+        if "alignment_id" in play_df.columns:
+            aid = play_df["alignment_id"][0]
+            alignment_tensor = torch.tensor([aid], dtype=torch.long)
+            
+        # Coverage
+        coverage_tensor = None
+        if "coverage_label" in play_df.columns:
+            row = play_df.select(["coverage_label"]).head(1).to_dict(as_series=False)
+            cov_label = row["coverage_label"][0]
+            if cov_label is not None:
+                 coverage_tensor = torch.tensor([cov_label], dtype=torch.float)
+        
+        # Pivot Features
+        feature_cols = ["std_x", "std_y", "s", "a", "std_dir", "std_o", "weight_norm", "role_id"]
+        feature_matrices = []
+        for col in feature_cols:
+            val_fill = 0
+            if col == "role_id": val_fill = 4
+            pivot = pdf.pivot(index='frame_id', columns='nfl_id', values=col).fillna(val_fill)
+            feature_matrices.append(pivot.values)
+            
+        # [Frames, Agents, Feats]
+        data_tensor = np.stack(feature_matrices, axis=-1)
+        data_tensor = torch.FloatTensor(data_tensor)
+        
+        num_frames = data_tensor.shape[0]
+        
+        # radius graph index helpers
+        # Iterate Frames
+        for t in range(num_frames - future_seq_len):
+            x_t = data_tensor[t] # [Agents, 8]
+            
+            # Extract Role (Last Col)
+            role_t = x_t[:, 7].long()
+            
+            # Keep features up to weight (first 7)
+            # x, y, s, a, dir, o, weight
+            input_x = x_t[:, :7] 
+            pos_t = input_x[:, :2] # x, y
+            
+            # Future Targets
+            y_t = data_tensor[t+1 : t+1+future_seq_len, :, :2]
+            y_t = y_t.permute(1, 0, 2) 
+            
+            # Edges
+            dist_matrix = torch.cdist(pos_t, pos_t)
+            mask = (dist_matrix < radius) & (dist_matrix > 1e-5)
+            edge_index = mask.nonzero().t()
+            
+            row_idx, col_idx = edge_index
+            diff = pos_t[row_idx] - pos_t[col_idx]
+            dist = torch.norm(diff, p=2, dim=-1).view(-1, 1)
+            angle = torch.atan2(diff[:, 1], diff[:, 0]).view(-1, 1)
+            edge_attr = torch.cat([dist, angle], dim=-1)
+            
+            data = Data(x=input_x, edge_index=edge_index, edge_attr=edge_attr, y=y_t, pos=pos_t)
+            
+            if role_t is not None: data.role = role_t
+            if formation_tensor is not None: data.formation = formation_tensor
+            if alignment_tensor is not None: data.alignment = alignment_tensor
+            if context_tensor is not None: data.context = context_tensor
+            if coverage_tensor is not None: data.y_coverage = coverage_tensor
+            
+            graph_list.append(data)
+            
+    return graph_list
         
     return graph_list

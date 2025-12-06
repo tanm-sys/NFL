@@ -101,12 +101,13 @@ def tune_model(num_trials=5):
     return study.best_params
 
 
-def train_model():
-    print("Starting training run...")
+def train_model(sanity=False):
+    print(f"Starting training run... (Sanity Mode: {sanity})")
     # Real implementation would load data here
     # Week 1 for demo
     from src.data_loader import DataLoader
     from src.features import create_graph_data
+    import polars as pl # Added for sanity filtering
     
     loader = DataLoader(".")
     try:
@@ -115,8 +116,24 @@ def train_model():
         
         # Create Graphs
         print("Generating Graph Data (Vectorized)...")
+        # If sanity, maybe load less data initially?
+        # But data_loader loads whole file. We slice after creation or try to slice DF?
+        # Slicing DF is risky for sequences. Let's create all graph data then slice list.
+        # Week 1 is big, creating ALL graph data might take > 2-3 mins.
+        # fast-path: Filter df to first N plays if sanity.
+        
+        if sanity:
+            # Filter to first 5 games or plays
+            game_ids = df["game_id"].unique().head(1)
+            df = df.filter(pl.col("game_id").is_in(game_ids))
+            print(f"Sanity: Filtered to {df.shape[0]} rows (1 game).")
+            
         graphs = create_graph_data(df, radius=20.0, future_seq_len=10)
         print(f"Generated {len(graphs)} frames of graph data.")
+        
+        if sanity:
+             graphs = graphs[:500]
+             print(f"Sanity: Truncated to 500 frames.")
         
         # Split
         train_len = int(0.8 * len(graphs))
@@ -132,22 +149,36 @@ def train_model():
         # Trainer
         # Check if GPU available
         accelerator = "gpu" if torch.cuda.is_available() else "cpu"
-        trainer = pl.Trainer(max_epochs=1, accelerator=accelerator, log_every_n_steps=10)
+        # Sanity: 1 epoch or even fewer steps?
+        limit_train_batches = 1.0
+        if sanity: limit_train_batches = 10 
+        
+        trainer = pl.Trainer(max_epochs=1, 
+                             accelerator=accelerator, 
+                             log_every_n_steps=1 if sanity else 10,
+                             limit_train_batches=limit_train_batches if sanity else 1.0)
         
         trainer.fit(model, train_loader, val_loader)
-        print("Training complete.")
+        
+        print("Training complete. Validating...")
+        metrics = trainer.validate(model, val_loader)
+        print("\n=== Final Sanity Check Metrics ===")
+        print(metrics)
         
     except Exception as e:
         print(f"Training setup failed (likely due to missing data in env): {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", type=str, default="train", choices=["train", "tune"], help="Mode: train or tune")
+    parser.add_argument("--sanity", action="store_true", help="Run quick sanity check")
     args = parser.parse_args()
     
     if args.mode == "tune":
         print("Starting Optuna Tuning...")
         tune_model(num_trials=5)
     else:
-        train_model()
+        train_model(sanity=args.sanity)

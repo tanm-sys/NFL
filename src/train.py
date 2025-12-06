@@ -1,0 +1,122 @@
+import torch
+import torch.nn.functional as F
+import pytorch_lightning as pl
+from pytorch_lightning.loggers import WandbLogger
+import optuna
+from torch_geometric.loader import DataLoader as PyGDataLoader
+from models.gnn import NFLGraphTransformer
+from features import create_graph_data
+import numpy as np
+
+class NFLGraphPredictor(pl.LightningModule):
+    def __init__(self, input_dim=6, hidden_dim=64, lr=1e-3, future_seq_len=10):
+        super().__init__()
+        self.save_hyperparameters()
+        self.model = NFLGraphTransformer(input_dim, hidden_dim, future_seq_len=future_seq_len)
+        self.lr = lr
+        
+    def forward(self, data):
+        return self.model(data)
+        
+    def training_step(self, batch, batch_idx):
+        # batch is a PyG Batch object
+        pred = self(batch)
+        
+        # Real Targets
+        y = batch.y # [Total_Nodes, Future_Seq, 2]
+        
+        # MSE Loss
+        loss = F.mse_loss(pred, y)
+        self.log("train_loss", loss)
+        return loss
+        
+    def validation_step(self, batch, batch_idx):
+        pred = self(batch)
+        y = batch.y
+        loss = F.mse_loss(pred, y)
+        
+        # ADE
+        disp = torch.sqrt(torch.sum((pred - y)**2, dim=-1))
+        ade = torch.mean(disp)
+        
+        self.log("val_loss", loss)
+        self.log("val_ade", ade)
+        return loss
+        
+    def configure_optimizers(self):
+        return torch.optim.Adam(self.parameters(), lr=self.lr)
+
+def tune_model(num_trials=5):
+    """
+    Optuna hyperparameter tuning loop.
+    """
+    def objective(trial):
+        lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+        hidden_dim = trial.suggest_categorical("hidden_dim", [32, 64, 128])
+        
+        model = NFLGraphPredictor(hidden_dim=hidden_dim, lr=lr)
+        
+        # Dummy Data for tuning
+        # In real scenario: Load data -> create_graph_data -> PyGDataLoader
+        # loader = PyGDataLoader(graph_list, batch_size=32)
+        # trainer.fit(model, loader)
+        
+        return 0.5 # Dummy validation score
+        
+    study = optuna.create_study(direction="minimize")
+    study.optimize(objective, n_trials=num_trials)
+    
+    print("Best params:", study.best_params)
+    return study.best_params
+
+
+def train_model():
+    print("Starting training run...")
+    # Real implementation would load data here
+    # Week 1 for demo
+    from data_loader import DataLoader
+    from features import create_graph_data
+    
+    loader = DataLoader(".")
+    try:
+        df = loader.load_week_data(1) 
+        df = loader.standardize_tracking_directions(df)
+        
+        # Create Graphs
+        print("Generating Graph Data (Vectorized)...")
+        graphs = create_graph_data(df, radius=20.0, future_seq_len=10)
+        print(f"Generated {len(graphs)} frames of graph data.")
+        
+        # Split
+        train_len = int(0.8 * len(graphs))
+        train_data = graphs[:train_len]
+        val_data = graphs[train_len:]
+        
+        train_loader = PyGDataLoader(train_data, batch_size=32, shuffle=True)
+        val_loader = PyGDataLoader(val_data, batch_size=32)
+        
+        # Model
+        model = NFLGraphPredictor(input_dim=6, hidden_dim=64, lr=1e-3)
+        
+        # Trainer
+        # Check if GPU available
+        accelerator = "gpu" if torch.cuda.is_available() else "cpu"
+        trainer = pl.Trainer(max_epochs=1, accelerator=accelerator, log_every_n_steps=10)
+        
+        trainer.fit(model, train_loader, val_loader)
+        print("Training complete.")
+        
+    except Exception as e:
+        print(f"Training setup failed (likely due to missing data in env): {e}")
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mode", type=str, default="train", choices=["train", "tune"], help="Mode: train or tune")
+    args = parser.parse_args()
+    
+    if args.mode == "tune":
+        print("Starting Optuna Tuning...")
+        tune_model(num_trials=5)
+    else:
+        train_model()

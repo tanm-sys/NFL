@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+.venv/
+venv/
+*.csv
+!input_*.csv
+!output_*.csv
+mlruns/
+models/
+.DS_Store

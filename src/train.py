@@ -9,11 +9,17 @@ from src.features import create_graph_data
 import numpy as np
 
 class NFLGraphPredictor(pl.LightningModule):
-    def __init__(self, input_dim=6, hidden_dim=64, lr=1e-3, future_seq_len=10):
+    def __init__(self, input_dim=7, hidden_dim=64, lr=1e-3, future_seq_len=10):
         super().__init__()
         self.save_hyperparameters()
         self.model = NFLGraphTransformer(input_dim, hidden_dim, future_seq_len=future_seq_len)
         self.lr = lr
+
+    # ...
+
+    # In train_model
+        # Model
+        model = NFLGraphPredictor(input_dim=7, hidden_dim=64, lr=1e-3)
         
     def forward(self, data):
         return self.model(data)
@@ -121,7 +127,7 @@ def train_model():
         val_loader = PyGDataLoader(val_data, batch_size=32)
         
         # Model
-        model = NFLGraphPredictor(input_dim=6, hidden_dim=64, lr=1e-3)
+        model = NFLGraphPredictor(input_dim=7, hidden_dim=64, lr=1e-3)
         
         # Trainer
         # Check if GPU available

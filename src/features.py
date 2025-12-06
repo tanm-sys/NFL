@@ -189,7 +189,7 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
     - edge_attr: [Num_Edges, 2] (Distance, Relative Angle)
     """
     # 1. Pivot to [Frames, Agents, Features]
-    feature_cols = ["std_x", "std_y", "s", "a", "std_dir", "std_o"]
+    feature_cols = ["std_x", "std_y", "s", "a", "std_dir", "std_o", "weight_norm", "role_id"]
     
     # Sort
     df = df.sort(["frame_id", "nfl_id"])
@@ -206,11 +206,16 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
     feature_matrices = []
     for col in feature_cols:
         # fillna(0) for missing agents
-        pivot = pdf.pivot(index='frame_id', columns='nfl_id', values=col).fillna(0)
+        # weight_norm might be missing? fill 0 (mean)
+        # role_id missing? fill 4 (unknown)
+        val_fill = 0
+        if col == "role_id": val_fill = 4
+        
+        pivot = pdf.pivot(index='frame_id', columns='nfl_id', values=col).fillna(val_fill)
         feature_matrices.append(pivot.values)
         
     # Stack: [Frames, Agents, Features]
-    # Features order: x, y, s, a, dir, o
+    # Features order: x, y, s, a, dir, o, weight, role
     data_tensor = np.stack(feature_matrices, axis=-1)
     data_tensor = torch.FloatTensor(data_tensor)
     
@@ -223,23 +228,30 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
     IDX_DIR = 4 
     
     # Context Features (Global for this play)
-    # Check if context cols exist (from updated loader)
     context_tensor = None
+    formation_tensor = None
+    alignment_tensor = None
+    
     if "down" in df.columns and "yards_to_go" in df.columns:
-        # Take first row (constant per play)
-        # down is 1-4, ytg is distance. Normalize?
-        # Down: 1-4. YTG: 1-99.
-        # Let's keep raw for embedding or normalize vaguely.
-        # Normalize simple: Down/4, YTG/100
-        row = df.select(["down", "yards_to_go"]).head(1).to_dict(as_series=False)
-        down = row["down"][0]
-        ytg = row["yards_to_go"][0]
+        cols = ["down", "yards_to_go"]
+        if "defenders_box_norm" in df.columns:
+            cols.append("defenders_box_norm")
+            
+        row = df.select(cols).head(1).to_dict(as_series=False)
+        down = row["down"][0] if row["down"][0] is not None else 1
+        ytg = row["yards_to_go"][0] if row["yards_to_go"][0] is not None else 10
+        box = row["defenders_box_norm"][0] if "defenders_box_norm" in row else 0.0
         
-        # Handle NA or casts
-        if down is None: down = 1
-        if ytg is None: ytg = 10
+        # Context: [Down, YTG, Box] -> Dim 3
+        context_tensor = torch.tensor([[down, ytg, box]], dtype=torch.float)
         
-        context_tensor = torch.tensor([[down, ytg]], dtype=torch.float) # [1, 2]
+    if "formation_id" in df.columns:
+        fid = df["formation_id"][0]
+        formation_tensor = torch.tensor([fid], dtype=torch.long)
+        
+    if "alignment_id" in df.columns:
+        aid = df["alignment_id"][0]
+        alignment_tensor = torch.tensor([aid], dtype=torch.long)
         
     # Multi-Task Label: Coverage Type
     coverage_tensor = None
@@ -255,7 +267,14 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
     for t in range(num_frames - future_seq_len):
         # Current Frame Features
         # [Agents, Feats]
-        x_t = data_tensor[t] 
+        # x, y, s, a, dir, o, weight, role
+        curr_t = data_tensor[t] 
+        
+        # Extract Role (Last Col)
+        role_t = curr_t[:, 7].long()
+        
+        # Keep features up to weight (first 7)
+        x_t = curr_t[:, :7] 
         pos_t = x_t[:, :2] # x, y
         
         # Future Targets
@@ -275,30 +294,13 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
         edge_index = mask.nonzero().t() # [2, Num_Edges]
         
         row, col = edge_index
-        
-        # Edge Attributes: [Distance, Relative Angle]
-        # Dist
-        dist = dist_matrix[row, col].unsqueeze(1) # [Edges, 1]
-        
-        # Relative Angle
-        # atan2(y_j - y_i, x_j - x_i) - dir_i
-        diff_x = pos_t[col, 0] - pos_t[row, 0]
-        diff_y = pos_t[col, 1] - pos_t[row, 1]
-        angle_abs = torch.atan2(diff_y, diff_x) * 180 / np.pi
-        
-        # dir is degrees, 0..360. vector is usually 0=East? Need to check semantics.
-        # Assuming standard math angle for simplicity or standardized direction.
-        # If standardized: 0=Right (East).
-        dir_i = x_t[row, IDX_DIR]
-        rel_angle = (angle_abs - dir_i) % 360
-        # Normalize to -180..180 or 0..1?
-        rel_angle = rel_angle.unsqueeze(1) / 360.0
-        
-        edge_attr = torch.cat([dist, rel_angle], dim=1) # [Edges, 2]
-        
         # Create Data
-        # Flatten y? Or keep as tensor? PyG handles any tensor in Data
         data = Data(x=x_t, edge_index=edge_index, edge_attr=edge_attr, y=y_t, pos=pos_t)
+        
+        # Attach Strategic Features
+        if role_t is not None: data.role = role_t
+        if formation_tensor is not None: data.formation = formation_tensor
+        if alignment_tensor is not None: data.alignment = alignment_tensor
         
         # Attach Context if available
         if context_tensor is not None:

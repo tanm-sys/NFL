@@ -32,29 +32,49 @@ class DataLoader:
         
         # Select context columns
         # absolute_yardline_number might need standardization same as x side
-        context_cols = ["game_id", "play_id", "down", "yards_to_go", "absolute_yardline_number", "possession_team", "team_coverage_man_zone"]
+        context_cols = ["game_id", "play_id", "down", "yards_to_go", "absolute_yardline_number", "possession_team", 
+                       "team_coverage_man_zone", "offense_formation", "receiver_alignment", "defenders_in_the_box"]
         existing_cols = [c for c in context_cols if c in valid_plays.columns]
         play_context = valid_plays.select(existing_cols)
         
-        # Filter plays with known coverage if we are doing MTL?
-        # Or keep them and mask loss. Let's keep them.
+        # MAPPINGS
+        formation_map = {"SHOTGUN": 0, "EMPTY": 1, "SINGLEBACK": 2, "PISTOL": 3, "I_FORM": 4, "JUMBO": 5, "WILDCAT": 6}
+        alignment_map = {"2x2": 0, "3x1": 1, "3x2": 2, "2x1": 3, "4x1": 4, "1x1": 5, "4x0": 6, "3x3": 7, "3x0": 8}
         
-        # Map Coverage to Int: Man=0, Zone=1, Other=Null
-        # Polars: .with_columns(pl.col("team_coverage_man_zone").map_dict({"MAN_COVERAGE": 0, "ZONE_COVERAGE": 1}))
-        # But handle nulls.
-        
+        # Apply Mappings & Clean
         play_context = play_context.with_columns(
+            # Coverage
             pl.when(pl.col("team_coverage_man_zone") == "MAN_COVERAGE").then(0)
             .when(pl.col("team_coverage_man_zone") == "ZONE_COVERAGE").then(1)
-            .otherwise(None) # Make sure others are null
-            .alias("coverage_label")
+            .otherwise(None)
+            .alias("coverage_label"),
+            
+            # Formation
+            pl.col("offense_formation").replace(formation_map, default=7).cast(pl.Int64).alias("formation_id"),
+            
+            # Alignment
+            pl.col("receiver_alignment").replace(alignment_map, default=9).cast(pl.Int64).alias("alignment_id"),
+            
+            # Defenders Box (Standardize: (x - 7) / 2 approx)
+            pl.col("defenders_in_the_box").fill_null(7.0).cast(pl.Float32).alias("defenders_box_norm")
         )
 
         # 3. Join
         # Tracking data has gameId, playId. Standardize names first if needed.
         if standard_cols:
             tracking_df = self._standardize_columns(tracking_df)
-            # play_context is already standardized by load_plays -> _standardize_columns
+            
+        # TRACKING FEATURE ENCODING
+        # Role Map
+        role_map = {"Defensive Coverage": 0, "Other Route Runner": 1, "Passer": 2, "Targeted Receiver": 3}
+        
+        tracking_df = tracking_df.with_columns([
+            # Role ID
+            pl.col("player_role").replace(role_map, default=4).cast(pl.Int64).alias("role_id"),
+            
+            # Weight Norm ((w - 200) / 50)
+            ((pl.col("player_weight").cast(pl.Float32) - 200.0) / 50.0).alias("weight_norm")
+        ])
         
         # Inner join filters out the nullified plays from tracking data
         # Cast join keys to match if needed (usually polars handles int/in but strict types matter)

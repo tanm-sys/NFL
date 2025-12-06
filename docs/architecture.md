@@ -17,15 +17,15 @@ graph TD
     end
 
     subgraph Fusion_Layer
-    EmbX --> SumNodes((+))
+    EmbX --> SumNodes(("Sum"))
     EmbRole --> SumNodes
     SumNodes -- "Node Emb [B*N, 64]" --> GNN_Input
     
-    EmbCtx --> SumCtx((+))
+    EmbCtx --> SumCtx(("Sum"))
     EmbForm --> SumCtx
     EmbAlign --> SumCtx
     SumCtx -- "Graph Emb [B, 64]" --> Broadcast
-    Broadcast -- "Expand to Nodes" --> GNN_Input((+))
+    Broadcast -- "Expand to Nodes" --> GNN_Input(("Sum"))
     end
 
     subgraph Encoder_GNN
@@ -93,9 +93,9 @@ graph TD
     PredTraj & GT_Traj --> MSE[MSE Loss]
     PredCov & GT_Cov --> BCE[BCEWithLogits Loss]
     
-    MSE --> Weighted sum((+))
-    BCE -- "x 0.5" --> Weighted sum
-    Weighted sum --> TotalLoss[Total Backward Loss]
+    MSE --> WeightedSum(("Sum"))
+    BCE -- "x 0.5" --> WeightedSum
+    WeightedSum --> TotalLoss["Total Backward Loss"]
     end
 ```
 3.  **Feature Engineering**:

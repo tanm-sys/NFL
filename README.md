@@ -1,13 +1,23 @@
-# NFL Big Data Bowl 2026 - Analytics Track Comparison
-
-**Team:** AI Analytics
-**Track:** Analytics
+# NFL Analytics Engine: Context-Aware Trajectory Prediction
 
 ## Overview
-This repository contains our submission for the NFL Big Data Bowl 2026. We leverage a **Spatial-Temporal Transformer** model to analyze coverage schemes and introduce **Zone Collapse Speed** as a new metric for defensive responsiveness.
+A state-of-the-art implementation for the NFL Big Data Bowl, using **Graph Neural Networks (GNN)**, **Transformers**, and **Strategic Embeddings** to predict player movements and classify defensive coverage.
 
-## Repository Structure
-- `src/`: Source code for data loading, metrics, models, and visualization.
+## 📚 Documentation
+*   [**System Architecture**](docs/architecture.md): Deep dive into the GNN+Transformer design.
+*   [**Data Dictionary**](docs/data_dictionary.md): Explanation of all input features (Physics + Strategy).
+*   [**Usage Guide**](docs/usage.md): Instructions for Training, Tuning, and Visualization.
+
+## 🚀 Quick Start
+```bash
+# Run a quick sanity check
+python -m src.train --mode train --sanity
+```
+
+## Project Status
+*   **Phase 1-6**: Baseline Setup & Physics (Completed).
+*   **Phase 7-10**: Context, Multi-Task, Attention (Completed).
+*   **Phase 11**: Strategic Embeddings (Completed).
   - `data_loader.py`: Efficient Polars-based tracking data loader.
   - `features.py`: H3 spatial indexing and feature engineering.
   - `metrics.py`: Implementation of novel metrics (Zone Collapse, Reaction Time).

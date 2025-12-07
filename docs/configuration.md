@@ -16,6 +16,8 @@ python -m src.train [OPTIONS]
 |----------|------|---------|-------------|
 | `--mode` | str | `train` | Operation mode: `train` or `tune` |
 | `--sanity` | flag | `False` | Run quick sanity check on small dataset |
+| `--probabilistic` | flag | `False` | Use GMM probabilistic decoder (6 modes) |
+| `--weeks` | int[] | `[1]` | List of weeks to train on (e.g., `1 2 3`) |
 
 ### Examples
 
@@ -28,6 +30,15 @@ python -m src.train --mode tune
 
 # Quick sanity check
 python -m src.train --mode train --sanity
+
+# Probabilistic mode
+python -m src.train --mode train --probabilistic
+
+# Multi-week training
+python -m src.train --mode train --weeks 1 2 3 4 5
+
+# Combined
+python -m src.train --mode train --probabilistic --weeks 1 2 3
 ```
 
 ---
@@ -44,8 +55,10 @@ NFLGraphTransformer(
     hidden_dim=64,         # Hidden embedding dimension
     heads=4,               # Number of attention heads
     future_seq_len=10,     # Prediction horizon (fixed)
-    edge_dim=2,            # Edge feature dimension (fixed)
-    num_gnn_layers=4       # Number of GNN layers
+    edge_dim=5,            # Edge feature dimension (fixed) - UPDATED
+    num_gnn_layers=4,      # Number of GNN layers
+    probabilistic=False,   # Use GMM decoder - NEW
+    num_modes=6            # Number of trajectory modes - NEW
 )
 ```
 
@@ -55,8 +68,10 @@ NFLGraphTransformer(
 | `hidden_dim` | 64 | 32-256 | Size of internal embeddings | Higher = more capacity, slower training |
 | `heads` | 4 | 2-8 | GATv2 attention heads | More heads = multi-perspective reasoning |
 | `future_seq_len` | 10 | **Fixed** | Future frames to predict (1.0s @ 10Hz) | Prediction horizon |
-| `edge_dim` | 2 | **Fixed** | Edge features: distance, angle | Fixed by graph construction |
+| `edge_dim` | 5 | **Fixed** | Edge features: dist, angle, rel_speed, rel_dir, same_team | Fixed by graph construction |
 | `num_gnn_layers` | 4 | 2-6 | Number of GATv2 layers | Deeper = larger receptive field |
+| `probabilistic` | False | bool | Use GMM decoder instead of deterministic | Enables uncertainty quantification |
+| `num_modes` | 6 | 3-10 | Number of trajectory modes (GMM only) | More modes = more diverse predictions |
 
 ### GraphPlayerEncoder
 
@@ -102,21 +117,32 @@ TrajectoryDecoder(
 Defined in `src/train.py` - `NFLGraphPredictor.configure_optimizers()`:
 
 ```python
-optimizer = torch.optim.Adam(
+optimizer = torch.optim.AdamW(  # Changed to AdamW
     self.parameters(),
     lr=self.lr,            # Learning rate
-    weight_decay=1e-5      # L2 regularization
+    weight_decay=1e-4      # L2 regularization (increased)
 )
 ```
 
 | Parameter | Default | Range | Description |
 |-----------|---------|-------|-------------|
 | `lr` | 1e-3 | 1e-5 to 1e-2 | Learning rate (tunable via Optuna) |
-| `weight_decay` | 1e-5 | 0 to 1e-3 | L2 regularization strength |
+| `weight_decay` | 1e-4 | 0 to 1e-3 | L2 regularization strength |
 
 ### Learning Rate Scheduling
 
-**ReduceLROnPlateau** (adaptive):
+**CosineAnnealingWarmRestarts** (current):
+
+```python
+scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+    optimizer,
+    T_0=10,                # Restart every 10 epochs
+    T_mult=2,              # Double period after restart
+    eta_min=1e-6           # Minimum learning rate
+)
+```
+
+**ReduceLROnPlateau** (alternative):
 
 ```python
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -128,37 +154,31 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 )
 ```
 
-**StepLR** (alternative):
-
-```python
-scheduler = torch.optim.lr_scheduler.StepLR(
-    optimizer,
-    step_size=10,          # Every 10 epochs
-    gamma=0.5              # Multiply by 0.5
-)
-```
-
 ### Loss Function
 
-Multi-task weighted loss:
+Multi-task weighted loss with velocity regularization:
 
 ```python
-loss = trajectory_loss + lambda_cov * coverage_loss
+loss = trajectory_loss + velocity_weight * velocity_loss + coverage_weight * coverage_loss
 ```
 
 | Component | Type | Weight | Description |
 |-----------|------|--------|-------------|
-| `trajectory_loss` | MSE | 1.0 | Mean Squared Error for (x, y) |
+| `trajectory_loss` | MSE/NLL | 1.0 | MSE (deterministic) or NLL (probabilistic) |
+| `velocity_loss` | MSE | 0.3 | Velocity consistency (penalizes unrealistic accelerations) |
 | `coverage_loss` | BCE | 0.5 | Binary Cross-Entropy for coverage |
 
 **Formula:**
-$$\mathcal{L} = \mathcal{L}_{traj} + 0.5 \times \mathcal{L}_{cov}$$
+$$\mathcal{L} = \mathcal{L}_{traj} + 0.3 \times \mathcal{L}_{vel} + 0.5 \times \mathcal{L}_{cov}$$
 
 **Adjust weights:**
 ```python
-# In training_step()
-lambda_cov = 0.5  # Change to 0.3 or 0.7 to adjust importance
-total_loss = traj_loss + lambda_cov * cov_loss
+# In NFLGraphPredictor.__init__()
+model = NFLGraphPredictor(
+    velocity_weight=0.3,   # Velocity loss weight
+    coverage_weight=0.5,   # Coverage loss weight
+    use_augmentation=True  # Enable data augmentation
+)
 ```
 
 ---

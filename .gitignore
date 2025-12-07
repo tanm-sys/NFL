@@ -1,12 +1,121 @@
+# Python
 __pycache__/
-*.pyc
-.ipynb_checkpoints/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
 .env
 .venv/
 venv/
+ENV/
+env/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# PyTorch Lightning
+lightning_logs/
+checkpoints/
+*.ckpt
+
+# MLflow / Experiment Tracking
+mlruns/
+mlartifacts/
+
+# Weights & Biases
+wandb/
+
+# Model Files
+models/
+*.pt
+*.pth
+*.h5
+*.pkl
+*.pickle
+
+# Data Files (exclude input/output CSVs)
 *.csv
 !input_*.csv
 !output_*.csv
-mlruns/
-models/
+data/raw/
+data/processed/
+*.parquet
+*.feather
+
+# Optuna
+optuna_studies/
+*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Cache
+.cache/
+*.cache
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Testing
+.pytest_cache/
+.tox/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Artifacts (keep the directory structure but ignore generated files)
+.gemini/antigravity/brain/*/videos/
+.gemini/antigravity/brain/*/images/
+.gemini/antigravity/brain/*/.system_generated/
+
+# Large video/animation files
+*.mp4
+*.avi
+*.mov
+*.gif
+
+# Profiling
+*.prof
+*.lprof

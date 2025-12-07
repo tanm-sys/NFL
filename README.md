@@ -11,10 +11,13 @@ A **state-of-the-art** deep learning system for NFL player trajectory prediction
 ### Key Features
 
 - **🧠 Hybrid Architecture**: 4-layer GATv2 + Transformer with residual connections
-- **📊 Strategic Context**: Formation, alignment, and role-aware embeddings
+- **🎲 Probabilistic Predictions**: GMM-based decoder with 6 trajectory modes and uncertainty quantification
+- **🤝 Social Pooling**: Explicit pairwise player interaction modeling
+- **📊 Strategic Context**: Formation, alignment, role, and temporal embeddings
 - **⚡ High Performance**: Polars-based data pipeline for efficient processing
 - **🎯 Multi-Task Learning**: Simultaneous trajectory prediction and coverage classification
-- **📈 Advanced Metrics**: ADE, FDE, Zone Collapse Speed, Defensive Reaction Time
+- **📈 Advanced Metrics**: ADE, FDE, Velocity Loss, Matchup Difficulty, Coverage Pressure
+- **🔄 Data Augmentation**: Horizontal flip and Gaussian noise for robust training
 - **🎨 Rich Visualization**: Attention maps, trajectory animations, field plots
 
 ## 📚 Documentation
@@ -88,28 +91,33 @@ graph LR
 
 1. **GraphPlayerEncoder**: 4-layer GATv2 with strategic embeddings
    - Residual connections and layer normalization
-   - Role, side, formation, and alignment embeddings
-   - Edge attributes: distance and relative angle
+   - Role, side, formation, alignment, and temporal embeddings
+   - **Social Pooling Layer**: Gated pairwise interaction aggregation
+   - Edge attributes: distance, angle, relative speed, relative direction, same-team indicator (5D)
 
-2. **TrajectoryDecoder**: Transformer-based temporal prediction
-   - Query position embeddings for future timesteps
-   - Non-autoregressive prediction (10 frames = 1 second)
+2. **TrajectoryDecoder**: Two modes available
+   - **Deterministic**: Transformer-based point predictions
+   - **Probabilistic (GMM)**: 6-mode Gaussian mixture with uncertainty
+     - Outputs: μ, σ, ρ parameters per mode
+     - NLL loss for distribution learning
 
 3. **Multi-Task Head**: Simultaneous optimization
-   - Trajectory prediction (MSE loss)
+   - Trajectory prediction (MSE or NLL loss)
+   - Velocity consistency loss (penalizes unrealistic accelerations)
    - Coverage classification (BCE loss)
 
 ## 📊 Performance Metrics
 
 | Metric | Value | Description |
 |--------|-------|-------------|
-| **ADE** | TBD | Average Displacement Error (yards) |
-| **FDE** | TBD | Final Displacement Error (yards) |
-| **Coverage Acc** | TBD | Man vs Zone classification accuracy |
-| **Training Time** | ~X hours | On single GPU (NVIDIA RTX 3090) |
-| **Inference Speed** | ~X ms/play | Average prediction latency |
+| **ADE** | 66.14 yards | Average Displacement Error (1 epoch baseline) |
+| **FDE** | 66.99 yards | Final Displacement Error (1 epoch baseline) |
+| **Coverage Acc** | 80.0% | Man vs Zone classification accuracy |
+| **Model Params** | 729K (det) / 271K (prob) | Deterministic / Probabilistic modes |
+| **Training Time** | ~8 sec/epoch | Sanity check (500 frames, CPU) |
+| **Inference Speed** | ~7 ms/batch | Average prediction latency |
 
-*Run training to populate metrics*
+*Note: Metrics from 1-epoch sanity run. Full training on all weeks will significantly improve ADE/FDE.*
 
 ## 📁 Project Structure
 
@@ -145,12 +153,16 @@ nfl-analytics-engine/
 - **Phase 11**: Strategic embeddings (formation, alignment, role, side)
 - **Phase 12**: 4-layer GNN with residual connections and dropout
 - **Phase 13**: Advanced metrics and visualization tools
+- **Phase 14**: Probabilistic GMM decoder with 6 trajectory modes
+- **Phase 15**: Social pooling layer for pairwise interactions
+- **Phase 16**: Velocity loss and data augmentation
+- **Phase 17**: Novel competition metrics (matchup difficulty, coverage pressure)
 
 ### 🔄 Current Focus
 
-- Model optimization and hyperparameter tuning
-- Performance benchmarking and analysis
-- Documentation and code quality improvements
+- Full multi-week training for competition submission
+- Hyperparameter tuning with Optuna
+- Submission notebook completion with insights
 
 ## 🛠️ Development
 

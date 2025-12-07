@@ -127,3 +127,154 @@ def calculate_defensive_reaction_time(play_df: pl.DataFrame,
     delays = delays.filter(delays >= 0)
     
     return delays.mean()
+
+
+def calculate_matchup_difficulty(play_df: pl.DataFrame, 
+                                  receiver_nfl_id: int,
+                                  defender_nfl_id: int) -> dict:
+    """
+    Quantify how difficult a defensive coverage assignment is.
+    Higher scores = harder matchup for defender.
+    
+    Args:
+        play_df: DataFrame containing tracking data for a single play.
+        receiver_nfl_id: NFL ID of the receiver.
+        defender_nfl_id: NFL ID of the covering defender.
+        
+    Returns:
+        Dictionary with matchup difficulty metrics.
+    """
+    receiver = play_df.filter(pl.col("nfl_id") == receiver_nfl_id)
+    defender = play_df.filter(pl.col("nfl_id") == defender_nfl_id)
+    
+    if receiver.height == 0 or defender.height == 0:
+        return {"matchup_difficulty": np.nan, "speed_advantage": np.nan, "separation": np.nan}
+    
+    # Join on frame_id
+    merged = receiver.join(
+        defender.select(["frame_id", "std_x", "std_y", "s"]).rename({
+            "std_x": "def_x", "std_y": "def_y", "s": "def_s"
+        }),
+        on="frame_id",
+        how="inner"
+    )
+    
+    if merged.height == 0:
+        return {"matchup_difficulty": np.nan, "speed_advantage": np.nan, "separation": np.nan}
+    
+    # Calculate separation over time
+    merged = merged.with_columns([
+        ((pl.col("std_x") - pl.col("def_x"))**2 + 
+         (pl.col("std_y") - pl.col("def_y"))**2).sqrt().alias("separation"),
+        (pl.col("s") - pl.col("def_s")).alias("speed_diff")
+    ])
+    
+    # Metrics
+    avg_separation = merged["separation"].mean()
+    max_separation = merged["separation"].max()
+    avg_speed_advantage = merged["speed_diff"].mean()
+    
+    # Matchup difficulty score (higher = harder for defender)
+    # Combines separation advantage + speed advantage
+    difficulty = (avg_separation / 5.0) + (avg_speed_advantage / 2.0)
+    difficulty = np.clip(difficulty, 0, 1)
+    
+    return {
+        "matchup_difficulty": float(difficulty),
+        "speed_advantage": float(avg_speed_advantage) if avg_speed_advantage else 0.0,
+        "avg_separation": float(avg_separation) if avg_separation else 0.0,
+        "max_separation": float(max_separation) if max_separation else 0.0
+    }
+
+
+def calculate_separation_at_target(play_df: pl.DataFrame, 
+                                    target_nfl_id: int,
+                                    target_frame: int) -> float:
+    """
+    Calculate separation of targeted receiver from nearest defender at catch point.
+    
+    Args:
+        play_df: DataFrame with tracking data.
+        target_nfl_id: NFL ID of targeted receiver.
+        target_frame: Frame when ball arrives/is caught.
+        
+    Returns:
+        Separation in yards at target moment.
+    """
+    frame_data = play_df.filter(pl.col("frame_id") == target_frame)
+    
+    receiver = frame_data.filter(pl.col("nfl_id") == target_nfl_id)
+    if receiver.height == 0:
+        return np.nan
+    
+    rec_x = receiver["std_x"][0]
+    rec_y = receiver["std_y"][0]
+    
+    # Get all defenders (side = Defense)
+    defenders = frame_data.filter(pl.col("player_side") == "Defense")
+    
+    if defenders.height == 0:
+        return np.nan
+    
+    # Calculate distances to all defenders
+    defenders = defenders.with_columns([
+        ((pl.col("std_x") - rec_x)**2 + (pl.col("std_y") - rec_y)**2).sqrt().alias("dist_to_rec")
+    ])
+    
+    # Return minimum distance (nearest defender)
+    return float(defenders["dist_to_rec"].min())
+
+
+def calculate_coverage_pressure_index(play_df: pl.DataFrame,
+                                       defensive_team: str,
+                                       target_frame: int) -> dict:
+    """
+    Comprehensive coverage pressure metric combining multiple factors.
+    
+    Args:
+        play_df: DataFrame with tracking data.
+        defensive_team: Team abbreviation for defense.
+        target_frame: Reference frame for measurement.
+        
+    Returns:
+        Dictionary with pressure metrics.
+    """
+    frame_data = play_df.filter(pl.col("frame_id") == target_frame)
+    defenders = frame_data.filter(pl.col("club") == defensive_team)
+    receivers = frame_data.filter(
+        (pl.col("club") != defensive_team) & 
+        (pl.col("nfl_id").is_not_null())  # Exclude football
+    )
+    
+    if defenders.height == 0 or receivers.height == 0:
+        return {"pressure_index": np.nan}
+    
+    # For each receiver, find nearest defender
+    pdf_def = defenders.select(["nfl_id", "std_x", "std_y"]).to_pandas()
+    pdf_rec = receivers.select(["nfl_id", "std_x", "std_y"]).to_pandas()
+    
+    separations = []
+    for _, rec in pdf_rec.iterrows():
+        distances = np.sqrt(
+            (pdf_def["std_x"] - rec["std_x"])**2 + 
+            (pdf_def["std_y"] - rec["std_y"])**2
+        )
+        min_dist = distances.min()
+        separations.append(min_dist)
+    
+    # Pressure metrics
+    avg_separation = np.mean(separations)
+    min_separation = np.min(separations)
+    tight_coverage_count = sum(1 for s in separations if s < 3.0)  # < 3 yards
+    
+    # Pressure index (inverse of average separation, scaled)
+    pressure_index = 1.0 / (1.0 + avg_separation / 5.0)
+    
+    return {
+        "pressure_index": float(pressure_index),
+        "avg_separation": float(avg_separation),
+        "min_separation": float(min_separation),
+        "tight_coverage_count": int(tight_coverage_count),
+        "total_receivers": len(separations)
+    }
+

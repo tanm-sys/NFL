@@ -48,15 +48,33 @@ python -m src.train --mode train
 
 ### Training with Custom Parameters
 
+Use CLI flags for common configurations:
+
+```bash
+# Probabilistic mode (GMM decoder)
+python -m src.train --mode train --probabilistic
+
+# Multi-week training
+python -m src.train --mode train --weeks 1 2 3 4 5
+
+# Combined
+python -m src.train --mode train --probabilistic --weeks 1 2 3
+```
+
 Modify `src/train.py` to adjust hyperparameters:
 
 ```python
 # In train_model() function
 model = NFLGraphPredictor(
     input_dim=7,
-    hidden_dim=64,      # Change to 128 for more capacity
-    lr=1e-3,            # Learning rate
-    future_seq_len=10
+    hidden_dim=64,          # Change to 128 for more capacity
+    lr=1e-3,                # Learning rate
+    future_seq_len=10,
+    probabilistic=True,     # Enable GMM decoder
+    num_modes=6,            # Number of trajectory modes
+    velocity_weight=0.3,    # Velocity loss weight
+    coverage_weight=0.5,    # Coverage loss weight
+    use_augmentation=True   # Enable data augmentation
 )
 
 trainer = pl.Trainer(
@@ -335,6 +353,40 @@ reaction_time = calculate_defensive_reaction_time(
 )
 
 print(f"Avg reaction time: {reaction_time:.3f} seconds")
+
+# Novel metrics (NEW)
+from src.metrics import (
+    calculate_matchup_difficulty,
+    calculate_separation_at_target,
+    calculate_coverage_pressure_index
+)
+
+# Matchup difficulty
+matchup = calculate_matchup_difficulty(
+    play_df,
+    receiver_nfl_id=12345,
+    defender_nfl_id=67890
+)
+print(f"Matchup difficulty: {matchup['matchup_difficulty']:.3f}")
+print(f"Speed advantage: {matchup['speed_advantage']:.2f} mph")
+print(f"Avg separation: {matchup['avg_separation']:.2f} yards")
+
+# Separation at target
+separation = calculate_separation_at_target(
+    play_df,
+    target_nfl_id=12345,
+    target_frame=15
+)
+print(f"Separation at catch: {separation:.2f} yards")
+
+# Coverage pressure index
+pressure = calculate_coverage_pressure_index(
+    play_df,
+    defensive_team="KC",
+    target_frame=10
+)
+print(f"Pressure index: {pressure['pressure_index']:.3f}")
+print(f"Tight coverage count: {pressure['tight_coverage_count']}")
 ```
 
 ---
@@ -398,6 +450,15 @@ traj, cov, attn = model(graphs[0], return_attention_weights=True)
 
 # Analyze
 print(f"Predicted coverage: {'Zone' if torch.sigmoid(cov) > 0.5 else 'Man'}")
+
+# For probabilistic model
+if model.model.probabilistic:
+    params, mode_probs, cov, attn = model.model(
+        graphs[0], 
+        return_distribution=True
+    )
+    print(f"Mode probabilities: {mode_probs[0]}")
+    print(f"Most likely mode: {mode_probs[0].argmax().item()}")
 ```
 
 ### Workflow 4: Batch Processing

@@ -178,8 +178,8 @@ class DataValidator:
         """Validate loaded dataframe."""
         issues = []
         
-        # Check required columns
-        required_cols = ['game_id', 'play_id', 'nfl_id', 'frame_id', 'x', 'y', 's', 'a', 'dis', 'o', 'dir']
+        # Check required columns (dis is optional - can be derived from speed)
+        required_cols = ['game_id', 'play_id', 'nfl_id', 'frame_id', 'x', 'y', 's', 'a', 'o', 'dir']
         missing_cols = [col for col in required_cols if col not in df.columns]
         if missing_cols:
             issues.append(f"Missing columns: {missing_cols}")
@@ -204,8 +204,8 @@ class DataValidator:
         
         # Check for duplicate frames
         if all(col in df.columns for col in ['game_id', 'play_id', 'nfl_id', 'frame_id']):
-            duplicates = df.group_by(['game_id', 'play_id', 'nfl_id', 'frame_id']).count()
-            duplicates = duplicates.filter(pl_df.col('count') > 1)
+            duplicates = df.group_by(['game_id', 'play_id', 'nfl_id', 'frame_id']).len()
+            duplicates = duplicates.filter(pl_df.col('len') > 1)
             if len(duplicates) > 0:
                 issues.append(f"Found {len(duplicates)} duplicate frames")
         

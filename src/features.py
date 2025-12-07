@@ -206,6 +206,10 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
         formation_tensor = None
         alignment_tensor = None
         
+        # Extract game_id and play_id for this play (for train/val splitting)
+        game_id = play_df["game_id"][0]
+        play_id = play_df["play_id"][0]
+        
         if "down" in play_df.columns and "yards_to_go" in play_df.columns:
             cols = ["down", "yards_to_go"]
             if "defenders_box_norm" in play_df.columns:
@@ -285,8 +289,10 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
             if context_tensor is not None: data.context = context_tensor
             if coverage_tensor is not None: data.y_coverage = coverage_tensor
             
+            # Store play identifiers for train/val splitting
+            data.game_id = torch.tensor([game_id], dtype=torch.long)
+            data.play_id = torch.tensor([play_id], dtype=torch.long)
+            
             graph_list.append(data)
             
-    return graph_list
-        
     return graph_list

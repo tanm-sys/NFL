@@ -95,11 +95,6 @@ class DataLoader:
             
         return df
 
-        if standard_cols:
-            df = self._standardize_columns(df)
-            
-        return df
-
     def load_plays(self) -> pl.DataFrame:
         """
         Load supplementary data (plays and game info).

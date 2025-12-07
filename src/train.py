@@ -15,12 +15,6 @@ class NFLGraphPredictor(pl.LightningModule):
         self.model = NFLGraphTransformer(input_dim, hidden_dim, future_seq_len=future_seq_len)
         self.lr = lr
 
-    # ...
-
-    # In train_model
-        # Model
-        model = NFLGraphPredictor(input_dim=7, hidden_dim=64, lr=1e-3)
-        
     def forward(self, data):
         return self.model(data)
         
@@ -54,11 +48,22 @@ class NFLGraphPredictor(pl.LightningModule):
         
         # Traj Validation
         loss_traj = F.mse_loss(predictions, y)
-        disp = torch.sqrt(torch.sum((predictions - y)**2, dim=-1))
+        disp = torch.sqrt(torch.sum((predictions - y)**2, dim=-1))  # [N, T]
+        
+        # ADE: Average Displacement Error (mean over all timesteps)
         ade = torch.mean(disp)
+        
+        # FDE: Final Displacement Error (error at last timestep only)
+        fde = torch.mean(disp[:, -1])
+        
+        # Miss Rate @ 2 yards: % of final predictions > 2 yards from ground truth
+        miss_threshold = 2.0  # yards
+        miss_rate = (disp[:, -1] > miss_threshold).float().mean()
         
         self.log("val_loss_traj", loss_traj)
         self.log("val_ade", ade)
+        self.log("val_fde", fde)
+        self.log("val_miss_rate_2yd", miss_rate)
         
         # Coverage Validation
         if hasattr(batch, 'y_coverage') and batch.y_coverage is not None:
@@ -135,10 +140,36 @@ def train_model(sanity=False):
              graphs = graphs[:500]
              print(f"Sanity: Truncated to 500 frames.")
         
-        # Split
-        train_len = int(0.8 * len(graphs))
-        train_data = graphs[:train_len]
-        val_data = graphs[train_len:]
+        # Split by play_id to prevent data leakage (frames from same play stay together)
+        # Extract unique play identifiers from graphs
+        play_ids = []
+        for g in graphs:
+            # Each graph should have game_id and play_id attributes
+            if hasattr(g, 'game_id') and hasattr(g, 'play_id'):
+                play_ids.append((int(g.game_id), int(g.play_id)))
+            else:
+                play_ids.append(None)
+        
+        unique_plays = list(set([p for p in play_ids if p is not None]))
+        
+        if len(unique_plays) > 0:
+            # Shuffle plays and split 80/20
+            np.random.seed(42)
+            np.random.shuffle(unique_plays)
+            split_idx = int(0.8 * len(unique_plays))
+            train_plays = set(unique_plays[:split_idx])
+            val_plays = set(unique_plays[split_idx:])
+            
+            train_data = [g for g, pid in zip(graphs, play_ids) if pid in train_plays]
+            val_data = [g for g, pid in zip(graphs, play_ids) if pid in val_plays]
+            print(f"Split by play_id: {len(train_plays)} train plays, {len(val_plays)} val plays")
+            print(f"Train frames: {len(train_data)}, Val frames: {len(val_data)}")
+        else:
+            # Fallback to simple split if play_id not available
+            print("Warning: play_id not found in graphs, using simple split (may have data leakage)")
+            train_len = int(0.8 * len(graphs))
+            train_data = graphs[:train_len]
+            val_data = graphs[train_len:]
         
         train_loader = PyGDataLoader(train_data, batch_size=32, shuffle=True)
         val_loader = PyGDataLoader(val_data, batch_size=32)

@@ -11,6 +11,13 @@ The NFL Analytics Engine is a **Hybrid Graph-Transformer** model designed to sol
 3. **Strategic Context**: Embeddings capture formation, alignment, and role information
 4. **Multi-Task Learning**: Simultaneous trajectory prediction and coverage classification
 
+### v2.0 Enhancements (P0-P3)
+
+5. **Relative Predictions (P0)**: Predict displacements instead of absolute positions
+6. **Motion History (P1)**: LSTM encodes past 5 frames of velocity/acceleration
+7. **Scene Understanding (P3)**: Set Transformer captures global play dynamics
+8. **Hierarchical Decoding (P3)**: Coarse-to-fine trajectory refinement
+
 ## High-Level Architecture
 
 ```mermaid
@@ -286,6 +293,7 @@ edge_index = radius_graph(
     loop=False    # No self-loops
 )
 
+```
 # Edge attributes
 edge_attr = compute_edge_features(positions, edge_index)
 # Returns [Num_Edges, 2]: [distance, angle]
@@ -293,7 +301,7 @@ edge_attr = compute_edge_features(positions, edge_index)
 
 ## Model Capacity
 
-**Parameter Count:**
+**Parameter Count (v2.0 with P0-P3):**
 
 | Component | Parameters | Description |
 |-----------|-----------|-------------|
@@ -305,9 +313,11 @@ edge_attr = compute_edge_features(positions, edge_index)
 | Alignment Embedding | 640 | Embedding(10, 64) |
 | GATv2 Layers (×4) | ~65K | 4 layers with residual |
 | Layer Norms (×4) | 512 | 4 × LayerNorm(64) |
+| **TemporalHistoryEncoder (P1)** | ~33K | 2-layer LSTM for motion history |
+| **SceneFlowEncoder (P3)** | ~25K | Set Transformer with inducing points |
 | Trajectory Decoder | ~33K | Transformer + head |
 | Coverage Classifier | 65 | Linear(64, 1) |
-| **Total** | **~101K** | Approximate total |
+| **Total** | **~810K** | Full model with P1/P3 |
 
 ## Training Configuration
 

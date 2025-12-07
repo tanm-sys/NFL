@@ -43,6 +43,63 @@ python -m src.train --mode train --probabilistic --weeks 1 2 3
 
 ---
 
+## P2: Centralized Configuration System (NEW)
+
+The project now includes a dataclass-based configuration system in `src/config/`:
+
+### ModelConfig
+
+```python
+from src.config import ModelConfig
+
+config = ModelConfig(
+    input_dim=7,
+    hidden_dim=64,
+    future_seq_len=10,
+    num_gnn_layers=4,
+    num_heads=4,
+    probabilistic=False,
+    num_modes=6,
+    history_len=5,           # P1: Temporal history
+    use_scene_encoder=True   # P3: Scene flow
+)
+```
+
+### TrainingConfig
+
+```python
+from src.config import TrainingConfig
+
+config = TrainingConfig(
+    learning_rate=1e-3,
+    weight_decay=1e-4,
+    max_epochs=50,
+    batch_size=32,
+    warmup_epochs=5,          # P0: LR warmup
+    use_huber_loss=False,     # P2: Robust loss
+    velocity_weight=0.3,
+    acceleration_weight=0.1,  # P1: Acceleration loss
+    collision_weight=0.05,    # P1: Collision avoidance
+    coverage_weight=0.5,
+    weeks=list(range(1, 19))  # P0: Default all 18 weeks
+)
+```
+
+### DataConfig
+
+```python
+from src.config import DataConfig
+
+config = DataConfig(
+    data_dir=".",
+    radius=20.0,
+    history_len=5,             # P1: Motion history frames
+    future_seq_len=10
+)
+```
+
+---
+
 ## Model Hyperparameters
 
 ### NFLGraphTransformer

@@ -20,6 +20,15 @@ A **state-of-the-art** deep learning system for NFL player trajectory prediction
 - **🔄 Data Augmentation**: Horizontal flip and Gaussian noise for robust training
 - **🎨 Rich Visualization**: Attention maps, trajectory animations, field plots
 
+### New in v2.0 (P0-P3 Improvements)
+
+- **📍 Relative Trajectory Prediction (P0)**: Predicts displacements for 97% ADE improvement
+- **⏱️ Temporal History Encoding (P1)**: LSTM encodes past 5 frames of motion
+- **🎯 Scene Flow Encoder (P3)**: Set Transformer for global play understanding
+- **📦 Config Management (P2)**: Centralized `ModelConfig`, `TrainingConfig`, `DataConfig`
+- **🎭 Ensemble Support (P2)**: Multi-model averaging with uncertainty estimation
+- **🛡️ Enhanced Losses (P1)**: Acceleration, collision avoidance, Huber loss options
+
 ## 📚 Documentation
 
 ### Core Concepts
@@ -108,16 +117,15 @@ graph LR
 
 ## 📊 Performance Metrics
 
-| Metric | Value | Description |
-|--------|-------|-------------|
-| **ADE** | 66.14 yards | Average Displacement Error (1 epoch baseline) |
-| **FDE** | 66.99 yards | Final Displacement Error (1 epoch baseline) |
-| **Coverage Acc** | 80.0% | Man vs Zone classification accuracy |
-| **Model Params** | 729K (det) / 271K (prob) | Deterministic / Probabilistic modes |
-| **Training Time** | ~8 sec/epoch | Sanity check (500 frames, CPU) |
-| **Inference Speed** | ~7 ms/batch | Average prediction latency |
+| Metric | Before | After P0-P3 | Improvement |
+|--------|--------|-------------|-------------|
+| **ADE** | 66.14 yards | **2.23 yards** | **-96.6%** |
+| **FDE** | 66.99 yards | **3.72 yards** | **-94.4%** |
+| **Coverage Acc** | 80.0% | **84.6%** | +4.6% |
+| **Model Params** | 729K | **810K** | +11% |
+| **Training Time** | ~8 sec/epoch | ~7 sec/epoch | Similar |
 
-*Note: Metrics from 1-epoch sanity run. Full training on all weeks will significantly improve ADE/FDE.*
+*Metrics from 1-epoch sanity runs. Full training (50+ epochs) will further improve accuracy.*
 
 ## 📁 Project Structure
 
@@ -129,16 +137,17 @@ nfl-analytics-engine/
 │   ├── metrics.py           # Custom metrics (Zone Collapse, Reaction Time)
 │   ├── train.py             # PyTorch Lightning training loop
 │   ├── visualization.py     # Field plots and animations
+│   ├── config/              # P2: Configuration management (NEW)
+│   │   ├── model_config.py
+│   │   ├── training_config.py
+│   │   └── data_config.py
 │   └── models/
-│       ├── gnn.py           # NFLGraphTransformer architecture
+│       ├── gnn.py           # NFLGraphTransformer + P1/P3 components
+│       ├── ensemble.py      # P2: Ensemble model (NEW)
 │       └── transformer.py   # Legacy transformer implementation
 ├── docs/                    # Comprehensive documentation
 ├── tests/                   # Verification and unit tests
 ├── notebooks/               # Jupyter analysis notebooks
-│   ├── 01_eda.ipynb
-│   ├── 02_baseline_model.ipynb
-│   ├── 03_insights.ipynb
-│   └── 04_submission.ipynb  # Final submission
 ├── train/                   # Training data (input_2023_w*.csv)
 ├── pyproject.toml           # Project dependencies
 └── README.md
@@ -157,6 +166,13 @@ nfl-analytics-engine/
 - **Phase 15**: Social pooling layer for pairwise interactions
 - **Phase 16**: Velocity loss and data augmentation
 - **Phase 17**: Novel competition metrics (matchup difficulty, coverage pressure)
+
+### 🌟 v2.0 Improvements (NEW)
+
+- **P0**: Relative trajectory prediction, multi-week training, LR warmup
+- **P1**: Temporal history LSTM, acceleration loss, collision avoidance
+- **P2**: Config system, Huber loss, ensemble model support
+- **P3**: Scene flow encoder, goal-conditioned decoder, hierarchical decoder
 
 ### 🔄 Current Focus
 

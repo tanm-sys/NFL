@@ -37,7 +37,7 @@ echo ""
 
 # Step 3: Install PyTorch Geometric
 echo -e "${YELLOW}[3/8] Installing PyTorch Geometric...${NC}"
-TORCH_VERSION=$(python -c "import torch; print(torch.__version__)")
+TORCH_VERSION=$(python -c "import torch; print(torch.__version__.split('+')[0])")
 CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda.replace('.', ''))")
 
 echo "PyTorch: $TORCH_VERSION, CUDA: $CUDA_VERSION"

@@ -36,15 +36,24 @@ drive.mount('/content/drive')
 ### 2. Install Dependencies
 
 ```python
-# Install PyTorch Geometric
+# IMPORANT: Ensure you are in the project directory
+%cd /content/drive/MyDrive/NFL_Project
+
+# Option A: Automated Setup (Recommended)
+!bash setup_colab.sh
+
+# Option B: Manual Installation (If automating fails)
 import torch
-torch_version = torch.__version__
+torch_version = torch.__version__.split('+')[0]
 cuda_version = torch.version.cuda.replace('.', '')
 
-!pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-{torch_version}+cu{cuda_version}.html
-!pip install torch-geometric
+# Install PyG binaries first to avoid build errors
+!pip install --no-index torch-scatter torch-sparse torch-cluster torch-spline-conv \
+  -f https://data.pyg.org/whl/torch-{torch_version}+cu{cuda_version}.html
 
-# Install all production dependencies
+# Install main library and requirements
+!pip install torch-geometric
+# Requirements file contains all other deps (excluding the binaries above)
 !pip install -r requirements.txt
 !pip install -e .
 ```

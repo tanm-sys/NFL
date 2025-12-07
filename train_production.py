@@ -656,6 +656,10 @@ def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Production NFL Analytics Training")
     
+    # Config file
+    parser.add_argument('--config', type=str, default=None,
+                       help='Path to YAML configuration file')
+    
     # Mode
     parser.add_argument('--mode', type=str, default='train', choices=['train', 'tune', 'test'],
                        help='Training mode')
@@ -703,20 +707,52 @@ def main():
     
     args = parser.parse_args()
     
-    # Create configuration
-    config_dict = {
-        'data_dir': args.data_dir,
-        'weeks': args.weeks if args.weeks else list(range(1, 19)),
-        'hidden_dim': args.hidden_dim,
-        'probabilistic': args.probabilistic,
-        'batch_size': args.batch_size,
-        'learning_rate': args.learning_rate,
-        'max_epochs': args.max_epochs,
-        'precision': args.precision,
-        'experiment_name': args.experiment_name or f'nfl_prod_{datetime.now().strftime("%Y%m%d_%H%M%S")}',
-        'validate_data': not args.no_validation,
-        'enable_profiling': args.profile,
-    }
+    # Load configuration from YAML if provided
+    config_dict = {}
+    if args.config:
+        import yaml
+        with open(args.config, 'r') as f:
+            yaml_config = yaml.safe_load(f)
+        
+        # Flatten nested YAML structure into config_dict
+        for section, values in yaml_config.items():
+            if isinstance(values, dict):
+                for key, val in values.items():
+                    config_dict[key] = val
+            else:
+                config_dict[section] = values
+        
+        console.print(f"[green]✓ Loaded configuration from {args.config}[/green]")
+    
+    # Override with CLI arguments (CLI takes precedence)
+    if args.data_dir != '.':
+        config_dict['data_dir'] = args.data_dir
+    if args.weeks:
+        config_dict['weeks'] = args.weeks
+    if args.hidden_dim != 64:
+        config_dict['hidden_dim'] = args.hidden_dim
+    if args.probabilistic:
+        config_dict['probabilistic'] = True
+    if args.batch_size != 32:
+        config_dict['batch_size'] = args.batch_size
+    if args.learning_rate != 1e-3:
+        config_dict['learning_rate'] = args.learning_rate
+    if args.max_epochs != 100:
+        config_dict['max_epochs'] = args.max_epochs
+    if args.precision != '16-mixed':
+        config_dict['precision'] = args.precision
+    if args.experiment_name:
+        config_dict['experiment_name'] = args.experiment_name
+    if args.no_validation:
+        config_dict['validate_data'] = False
+    if args.profile:
+        config_dict['enable_profiling'] = True
+    
+    # Set defaults for required fields if not in config
+    if 'weeks' not in config_dict:
+        config_dict['weeks'] = list(range(1, 19))
+    if 'experiment_name' not in config_dict:
+        config_dict['experiment_name'] = f'nfl_prod_{datetime.now().strftime("%Y%m%d_%H%M%S")}'
     
     config = ProductionConfig(**config_dict)
     

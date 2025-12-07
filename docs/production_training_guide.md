@@ -36,26 +36,26 @@ drive.mount('/content/drive')
 ### 2. Install Dependencies
 
 ```python
-# IMPORANT: Ensure you are in the project directory
+# IMPORTANT: Ensure you are in the project directory
 %cd /content/drive/MyDrive/NFL_Project
 
 # Option A: Automated Setup (Recommended)
 !bash setup_colab.sh
 
-# Option B: Manual Installation (If automating fails)
+# Option B: Manual Installation (If automation fails)
+# Step 1: Install torch-geometric (works without optional extensions in v2.7.0+)
+!pip install torch-geometric
+
+# Step 2: Install project requirements
+!pip install -r requirements.txt
+!pip install -e .
+
+# Step 3 (Optional): Try to install optimized extensions if wheels exist
+# Note: May fail for very new PyTorch versions - that's OK, core functionality works
 import torch
 torch_version = torch.__version__.split('+')[0]
 cuda_version = torch.version.cuda.replace('.', '')
-
-# Install PyG binaries first to avoid build errors
-!pip install --no-index torch-scatter torch-sparse torch-cluster torch-spline-conv \
-  -f https://data.pyg.org/whl/torch-{torch_version}+cu{cuda_version}.html
-
-# Install main library and requirements
-!pip install torch-geometric
-# Requirements file contains all other deps (excluding the binaries above)
-!pip install -r requirements.txt
-!pip install -e .
+!pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-{torch_version}+cu{cuda_version}.html || echo "Optional extensions not available - continuing without them"
 ```
 
 ### 3. Run Production Training

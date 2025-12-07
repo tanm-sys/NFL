@@ -42,8 +42,20 @@ CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda.replace('.', ''
 
 echo "PyTorch: $TORCH_VERSION, CUDA: $CUDA_VERSION"
 
-pip install -q torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-${TORCH_VERSION}+cu${CUDA_VERSION}.html
+# Install torch-geometric first (works without scatter/sparse in 2.7.0+)
 pip install -q torch-geometric
+
+# Try to install optional optimized ops (may fail for newest PyTorch versions)
+echo "Attempting to install optional PyG extensions..."
+WHEEL_URL="https://data.pyg.org/whl/torch-${TORCH_VERSION}+cu${CUDA_VERSION}.html"
+
+# Check if wheels exist before attempting install
+if curl -s --head "$WHEEL_URL" | grep -q "200 OK"; then
+    pip install -q torch-scatter torch-sparse -f "$WHEEL_URL" 2>/dev/null || \
+        echo -e "${YELLOW}⚠ Optional PyG extensions not available for this PyTorch version. Core functionality will still work.${NC}"
+else
+    echo -e "${YELLOW}⚠ Pre-built wheels not found for PyTorch ${TORCH_VERSION}. Using torch-geometric without optional extensions.${NC}"
+fi
 
 echo -e "${GREEN}✓ PyTorch Geometric installed${NC}"
 echo ""

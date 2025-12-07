@@ -180,13 +180,14 @@ def prepare_tensor_data(df: pl.DataFrame, seq_len: int = 10) -> Tuple[torch.Tens
         
     return torch.FloatTensor(np.array(X_list)), torch.FloatTensor(np.array(Y_list))
 
-def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: int = 10) -> List[Data]:
+def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: int = 10, history_len: int = 5) -> List[Data]:
     """
     Converts a dataframe into a list of PyG Data objects (graphs).
     Optimized: Pivots to Tensor first, then slices.
     Adds:
-    - y: Future trajectory [Num_Agents, Future_Seq, 2]
-    - edge_attr: [Num_Edges, 2] (Distance, Relative Angle)
+    - y: Future trajectory [Num_Agents, Future_Seq, 2] (relative)
+    - history: Past motion [Num_Agents, History_Len, 4] (vel_x, vel_y, acc_x, acc_y)
+    - edge_attr: [Num_Edges, 5] rich edge features
     """
     graph_list = []
     
@@ -258,8 +259,11 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
         num_frames = data_tensor.shape[0]
         
         # radius graph index helpers
-        # Iterate Frames
-        for t in range(num_frames - future_seq_len):
+        # Iterate Frames - need history_len before and future_seq_len after
+        min_start = history_len
+        max_end = num_frames - future_seq_len
+        
+        for t in range(min_start, max_end):
             x_t = data_tensor[t]  # [Agents, 9]
             
             # Extract Role and Side (Last 2 Cols)
@@ -273,9 +277,36 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
             speed_t = input_x[:, 2]  # speed
             dir_t = input_x[:, 4]    # direction
             
-            # Future Targets
-            y_t = data_tensor[t+1 : t+1+future_seq_len, :, :2]
-            y_t = y_t.permute(1, 0, 2) 
+            # Compute Motion History (P1) - velocity and acceleration from past positions
+            # history_positions: [history_len, Agents, 2]
+            if history_len > 1:
+                history_positions = data_tensor[t-history_len:t, :, :2]  # [H, Agents, 2]
+                history_positions = history_positions.permute(1, 0, 2)   # [Agents, H, 2]
+                
+                # Compute velocity (position differences)
+                velocity = history_positions[:, 1:, :] - history_positions[:, :-1, :]  # [Agents, H-1, 2]
+                
+                # Compute acceleration (velocity differences)  
+                if velocity.shape[1] > 1:
+                    acceleration = velocity[:, 1:, :] - velocity[:, :-1, :]  # [Agents, H-2, 2]
+                    # Pad acceleration to match velocity length
+                    acc_pad = torch.zeros(acceleration.shape[0], 1, 2)
+                    acceleration = torch.cat([acc_pad, acceleration], dim=1)
+                else:
+                    acceleration = torch.zeros_like(velocity)
+                
+                # Combine: [vel_x, vel_y, acc_x, acc_y] -> [Agents, H-1, 4]
+                history_t = torch.cat([velocity, acceleration], dim=-1)
+            else:
+                history_t = None
+            
+            # Future Targets - RELATIVE to current position (critical for accuracy)
+            future_abs = data_tensor[t+1 : t+1+future_seq_len, :, :2]  # [T, Agents, 2]
+            future_abs = future_abs.permute(1, 0, 2)  # [Agents, T, 2]
+            
+            # Convert to relative displacements from current position
+            current_pos = pos_t.unsqueeze(1)  # [Agents, 1, 2]
+            y_t = future_abs - current_pos  # [Agents, T, 2] - relative displacements 
             
             # Edges with RICHER FEATURES
             dist_matrix = torch.cdist(pos_t, pos_t)
@@ -309,6 +340,9 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
             
             data = Data(x=input_x, edge_index=edge_index, edge_attr=edge_attr, y=y_t, pos=pos_t)
             
+            # Store current position for converting predictions back to absolute
+            data.current_pos = pos_t  # [Agents, 2]
+            
             # Add temporal encoding (normalized frame position)
             data.frame_t = torch.tensor([t / num_frames], dtype=torch.float)
             
@@ -318,6 +352,7 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
             if alignment_tensor is not None: data.alignment = alignment_tensor
             if context_tensor is not None: data.context = context_tensor
             if coverage_tensor is not None: data.y_coverage = coverage_tensor
+            if history_t is not None: data.history = history_t  # [Agents, H-1, 4]
             
             # Store play identifiers for train/val splitting
             data.game_id = torch.tensor([game_id], dtype=torch.long)

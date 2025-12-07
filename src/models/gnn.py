@@ -5,6 +5,282 @@ from torch_geometric.nn import GATv2Conv, GlobalAttention, global_mean_pool
 from torch_geometric.data import Data, Batch
 from torch_geometric.utils import scatter
 
+
+class TemporalHistoryEncoder(nn.Module):
+    """
+    Encodes past motion history (velocity, acceleration) using LSTM.
+    Captures temporal patterns that inform future trajectory prediction.
+    """
+    def __init__(self, input_dim=4, hidden_dim=64, num_layers=2):
+        super().__init__()
+        # Input: [velocity_x, velocity_y, accel_x, accel_y] per timestep
+        self.lstm = nn.LSTM(
+            input_size=input_dim,
+            hidden_size=hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=0.1 if num_layers > 1 else 0
+        )
+        self.output_proj = nn.Linear(hidden_dim, hidden_dim)
+        
+    def forward(self, history):
+        """
+        Args:
+            history: [N, T, 4] past motion features (vel_x, vel_y, acc_x, acc_y)
+            
+        Returns:
+            temporal_emb: [N, hidden_dim] temporal context embedding
+        """
+        if history is None or history.numel() == 0:
+            return None
+            
+        # LSTM encoding
+        _, (h_n, _) = self.lstm(history)  # h_n: [num_layers, N, hidden]
+        
+        # Use final layer hidden state
+        final_hidden = h_n[-1]  # [N, hidden]
+        
+        return self.output_proj(final_hidden)
+
+
+class SceneFlowEncoder(nn.Module):
+    """
+    P3: Global scene understanding via Set Transformer.
+    Captures overall play dynamics beyond individual player interactions.
+    """
+    def __init__(self, hidden_dim=64, num_heads=4, num_inducing=8):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+        
+        # Inducing points for efficient set attention (like PMA in Set Transformer)
+        self.inducing_points = nn.Parameter(torch.randn(num_inducing, hidden_dim))
+        
+        # Multi-head attention: inducing points attend to all nodes
+        self.cross_attention = nn.MultiheadAttention(
+            embed_dim=hidden_dim,
+            num_heads=num_heads,
+            batch_first=True,
+            dropout=0.1
+        )
+        
+        # Aggregate inducing points to single scene embedding
+        self.pool_attention = nn.Linear(hidden_dim, 1)
+        self.output_proj = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim)
+        )
+        
+    def forward(self, node_embs, batch_idx):
+        """
+        Args:
+            node_embs: [N, H] node embeddings from GNN
+            batch_idx: [N] batch assignment
+            
+        Returns:
+            scene_emb: [B, H] global scene embeddings per graph
+        """
+        if batch_idx is None:
+            # Single graph
+            nodes = node_embs.unsqueeze(0)  # [1, N, H]
+            queries = self.inducing_points.unsqueeze(0)  # [1, K, H]
+            
+            # Cross attention
+            attended, _ = self.cross_attention(queries, nodes, nodes)  # [1, K, H]
+            
+            # Weighted pooling
+            weights = F.softmax(self.pool_attention(attended), dim=1)  # [1, K, 1]
+            scene = (weights * attended).sum(dim=1)  # [1, H]
+            
+            return self.output_proj(scene)
+        
+        # Process each graph in batch
+        num_graphs = batch_idx.max().item() + 1
+        scene_embs = []
+        
+        for b in range(num_graphs):
+            mask = batch_idx == b
+            nodes = node_embs[mask].unsqueeze(0)  # [1, n, H]
+            queries = self.inducing_points.unsqueeze(0)  # [1, K, H]
+            
+            # Cross attention
+            attended, _ = self.cross_attention(queries, nodes, nodes)  # [1, K, H]
+            
+            # Weighted pooling
+            weights = F.softmax(self.pool_attention(attended), dim=1)
+            scene = (weights * attended).sum(dim=1)  # [1, H]
+            scene_embs.append(scene)
+        
+        return self.output_proj(torch.cat(scene_embs, dim=0))  # [B, H]
+
+
+class GoalConditionedDecoder(nn.Module):
+    """
+    P3: Goal-conditioned trajectory prediction.
+    Predicts trajectories conditioned on potential target locations.
+    """
+    def __init__(self, hidden_dim=64, num_heads=4, future_seq_len=10, num_goals=4):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+        self.future_seq_len = future_seq_len
+        self.num_goals = num_goals
+        
+        # Goal proposals from context
+        self.goal_proposer = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, num_goals * 2)  # x, y for each goal
+        )
+        
+        # Goal attention - which goal to follow
+        self.goal_attention = nn.Sequential(
+            nn.Linear(hidden_dim + 2, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        )
+        
+        # Trajectory decoder given goal
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=hidden_dim,
+            nhead=num_heads,
+            dim_feedforward=hidden_dim * 4,
+            dropout=0.1,
+            batch_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=2)
+        
+        self.query_pos_emb = nn.Parameter(torch.randn(1, future_seq_len, hidden_dim))
+        self.goal_emb = nn.Linear(2, hidden_dim)
+        self.output_head = nn.Linear(hidden_dim, 2)
+        
+    def forward(self, context_emb, return_goals=False):
+        """
+        Args:
+            context_emb: [N, H] node context embeddings
+            return_goals: If True, also return goal proposals
+            
+        Returns:
+            predictions: [N, T, 2] trajectory predictions
+            goals: Optional [N, num_goals, 2] proposed goal positions
+        """
+        num_nodes = context_emb.shape[0]
+        device = context_emb.device
+        
+        # Propose goals
+        goal_params = self.goal_proposer(context_emb)  # [N, num_goals * 2]
+        goals = goal_params.view(num_nodes, self.num_goals, 2)  # [N, K, 2]
+        
+        # Compute goal attention weights
+        context_expanded = context_emb.unsqueeze(1).expand(-1, self.num_goals, -1)  # [N, K, H]
+        goal_context = torch.cat([context_expanded, goals], dim=-1)  # [N, K, H+2]
+        goal_weights = F.softmax(self.goal_attention(goal_context), dim=1)  # [N, K, 1]
+        
+        # Weighted goal
+        selected_goal = (goal_weights * goals).sum(dim=1)  # [N, 2]
+        
+        # Encode goal
+        goal_emb = self.goal_emb(selected_goal)  # [N, H]
+        
+        # Combine context and goal
+        combined = context_emb + goal_emb  # [N, H]
+        
+        # Decode trajectory
+        x = combined.unsqueeze(1).repeat(1, self.future_seq_len, 1)  # [N, T, H]
+        x = x + self.query_pos_emb.repeat(num_nodes, 1, 1)
+        
+        out = self.transformer(x)  # [N, T, H]
+        predictions = self.output_head(out)  # [N, T, 2]
+        
+        if return_goals:
+            return predictions, goals
+        return predictions
+
+
+class HierarchicalDecoder(nn.Module):
+    """
+    P3: Hierarchical coarse-to-fine trajectory prediction.
+    First predicts waypoints, then refines intermediate positions.
+    """
+    def __init__(self, hidden_dim=64, num_heads=4, future_seq_len=10, num_waypoints=3):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+        self.future_seq_len = future_seq_len
+        self.num_waypoints = num_waypoints
+        
+        # Coarse prediction (waypoints at key frames)
+        self.coarse_decoder = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, num_waypoints * 2)
+        )
+        
+        # Fine prediction (interpolate between waypoints)
+        self.refine_encoder = nn.Linear(hidden_dim + 4, hidden_dim)  # context + start/end waypoint
+        
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=hidden_dim,
+            nhead=num_heads,
+            dim_feedforward=hidden_dim * 2,
+            dropout=0.1,
+            batch_first=True
+        )
+        self.refine_transformer = nn.TransformerEncoder(encoder_layer, num_layers=1)
+        self.refine_head = nn.Linear(hidden_dim, 2)
+        
+    def forward(self, context_emb, return_waypoints=False):
+        """
+        Args:
+            context_emb: [N, H] node context embeddings
+            return_waypoints: If True, return coarse waypoints
+            
+        Returns:
+            predictions: [N, T, 2] refined trajectory predictions
+        """
+        num_nodes = context_emb.shape[0]
+        device = context_emb.device
+        
+        # Coarse waypoints
+        waypoint_params = self.coarse_decoder(context_emb)  # [N, num_waypoints * 2]
+        waypoints = waypoint_params.view(num_nodes, self.num_waypoints, 2)  # [N, W, 2]
+        
+        # Compute frames per segment
+        frames_per_segment = self.future_seq_len // (self.num_waypoints - 1)
+        
+        # Refine each segment
+        all_refined = []
+        
+        for i in range(self.num_waypoints - 1):
+            start_wp = waypoints[:, i, :]  # [N, 2]
+            end_wp = waypoints[:, i+1, :]  # [N, 2]
+            
+            # Conditioning on segment endpoints
+            segment_context = torch.cat([context_emb, start_wp, end_wp], dim=-1)  # [N, H+4]
+            segment_emb = self.refine_encoder(segment_context)  # [N, H]
+            
+            # Expand for frames in this segment
+            x = segment_emb.unsqueeze(1).repeat(1, frames_per_segment, 1)  # [N, F, H]
+            
+            # Refine
+            refined = self.refine_transformer(x)
+            refined = self.refine_head(refined)  # [N, F, 2]
+            
+            # Add linear interpolation as residual
+            t = torch.linspace(0, 1, frames_per_segment, device=device).view(1, -1, 1)
+            linear_interp = start_wp.unsqueeze(1) + t * (end_wp - start_wp).unsqueeze(1)
+            
+            all_refined.append(refined + linear_interp)
+        
+        predictions = torch.cat(all_refined, dim=1)  # [N, T, 2]
+        
+        # Pad if needed
+        if predictions.shape[1] < self.future_seq_len:
+            pad = predictions[:, -1:, :].repeat(1, self.future_seq_len - predictions.shape[1], 1)
+            predictions = torch.cat([predictions, pad], dim=1)
+        
+        if return_waypoints:
+            return predictions[:, :self.future_seq_len], waypoints
+        return predictions[:, :self.future_seq_len]
+
 class GraphPlayerEncoder(nn.Module):
     """
     Encodes player spatial state + Strategic Features.
@@ -50,6 +326,9 @@ class GraphPlayerEncoder(nn.Module):
         # Social Pooling Layer
         self.social_pooling = SocialPoolingLayer(hidden_dim)
         
+        # Temporal History Encoder (NEW - P1)
+        self.history_encoder = TemporalHistoryEncoder(input_dim=4, hidden_dim=hidden_dim)
+        
         # Dropout for regularization
         self.dropout = nn.Dropout(dropout)
         
@@ -57,7 +336,7 @@ class GraphPlayerEncoder(nn.Module):
         self.final_norm = nn.LayerNorm(hidden_dim)
         
     def forward(self, x, edge_index, edge_attr, context=None, batch=None, role=None, side=None, 
-                formation=None, alignment=None, frame_t=None, return_attention_weights=False):
+                formation=None, alignment=None, frame_t=None, history=None, return_attention_weights=False):
         # x: [Num_Nodes, Input_Dim]
         
         h = self.embedding(x)
@@ -104,6 +383,12 @@ class GraphPlayerEncoder(nn.Module):
                 c_nodes = c_emb.expand(h.size(0), -1)
                 
             h = h + c_nodes
+        
+        # Fuse Temporal History (P1 - LSTM encoded motion history)
+        if history is not None and history.numel() > 0:
+            history_emb = self.history_encoder(history)  # [N, hidden]
+            if history_emb is not None:
+                h = h + history_emb
         
         # Multi-Layer GNN with Residual Connections
         attn_weights = None
@@ -353,16 +638,23 @@ class ProbabilisticTrajectoryDecoder(nn.Module):
 class NFLGraphTransformer(nn.Module):
     """
     Main model combining GNN encoder with trajectory decoder and coverage classifier.
+    P3: Now includes SceneFlowEncoder for global play understanding.
     """
     def __init__(self, input_dim=7, hidden_dim=64, heads=4, future_seq_len=10, 
-                 edge_dim=5, num_gnn_layers=4, probabilistic=False, num_modes=6):
+                 edge_dim=5, num_gnn_layers=4, probabilistic=False, num_modes=6,
+                 use_scene_encoder=True):
         super().__init__()
         self.probabilistic = probabilistic
+        self.use_scene_encoder = use_scene_encoder
         
         self.encoder = GraphPlayerEncoder(
             input_dim, hidden_dim, heads, 
             edge_dim=edge_dim, num_layers=num_gnn_layers
         )
+        
+        # P3: Scene Flow Encoder for global context
+        if use_scene_encoder:
+            self.scene_encoder = SceneFlowEncoder(hidden_dim, heads)
         
         if probabilistic:
             self.decoder = ProbabilisticTrajectoryDecoder(
@@ -400,12 +692,25 @@ class NFLGraphTransformer(nn.Module):
         alignment = data.alignment if hasattr(data, 'alignment') else None
         frame_t = data.frame_t if hasattr(data, 'frame_t') else None
         
+        # Temporal History (P1)
+        history = data.history if hasattr(data, 'history') else None
+        
         # Encode Spatial (GNN)
         node_embs, attn_weights = self.encoder(
             x, edge_index, edge_attr, context, batch, 
             role=role, side=side, formation=formation, alignment=alignment,
-            frame_t=frame_t, return_attention_weights=return_attention_weights
+            frame_t=frame_t, history=history, return_attention_weights=return_attention_weights
         )
+        
+        # P3: Add global scene context
+        if self.use_scene_encoder:
+            scene_emb = self.scene_encoder(node_embs, batch)  # [B, H]
+            # Broadcast scene embedding to all nodes
+            if batch is not None:
+                scene_nodes = scene_emb[batch]  # [N, H]
+            else:
+                scene_nodes = scene_emb.expand(node_embs.size(0), -1)
+            node_embs = node_embs + 0.5 * scene_nodes  # Weighted addition
         
         # Decode Temporal (Trajectory Prediction)
         if self.probabilistic:

@@ -27,6 +27,73 @@ def velocity_loss(pred, target):
     return F.mse_loss(pred_vel, target_vel)
 
 
+def acceleration_loss(pred, target):
+    """
+    Penalize unrealistic acceleration patterns (P1 enhancement).
+    Second-order smoothness constraint for more realistic motion.
+    
+    Args:
+        pred: [N, T, 2] predicted positions
+        target: [N, T, 2] ground truth positions
+    
+    Returns:
+        loss: scalar acceleration consistency loss
+    """
+    if pred.shape[1] < 3:
+        return torch.tensor(0.0, device=pred.device)
+    
+    pred_vel = pred[:, 1:] - pred[:, :-1]  # [N, T-1, 2]
+    target_vel = target[:, 1:] - target[:, :-1]
+    
+    pred_acc = pred_vel[:, 1:] - pred_vel[:, :-1]  # [N, T-2, 2]
+    target_acc = target_vel[:, 1:] - target_vel[:, :-1]
+    
+    return F.mse_loss(pred_acc, target_acc)
+
+
+def collision_avoidance_loss(pred_positions, batch_idx, min_distance=1.0):
+    """
+    Penalize predictions where players occupy the same space (P1 enhancement).
+    Encourages physically plausible non-overlapping trajectories.
+    
+    Args:
+        pred_positions: [N, T, 2] predicted positions
+        batch_idx: [N] batch assignment for each node
+        min_distance: Minimum allowed distance in yards
+        
+    Returns:
+        loss: scalar collision penalty
+    """
+    if batch_idx is None or pred_positions.shape[0] < 2:
+        return torch.tensor(0.0, device=pred_positions.device)
+    
+    # Compute pairwise distances within each graph
+    total_loss = 0.0
+    n_graphs = 0
+    
+    for b in batch_idx.unique():
+        mask = batch_idx == b
+        pos = pred_positions[mask]  # [n_nodes, T, 2]
+        
+        if pos.shape[0] < 2:
+            continue
+        
+        # Average position across time for efficiency
+        avg_pos = pos.mean(dim=1)  # [n_nodes, 2]
+        
+        # Pairwise distances
+        dist = torch.cdist(avg_pos.unsqueeze(0), avg_pos.unsqueeze(0)).squeeze(0)
+        
+        # Penalize close distances (excluding self-distance)
+        dist = dist + torch.eye(dist.shape[0], device=dist.device) * 100  # Mask diagonal
+        violations = F.relu(min_distance - dist)
+        
+        total_loss += violations.sum()
+        n_graphs += 1
+    
+    return total_loss / max(n_graphs, 1)
+
+
 def augment_graph(data, flip_horizontal=True, add_noise=True, noise_std=0.1):
     """
     Apply data augmentation to graph data.
@@ -69,7 +136,8 @@ class NFLGraphPredictor(pl.LightningModule):
     """
     def __init__(self, input_dim=7, hidden_dim=64, lr=1e-3, future_seq_len=10,
                  probabilistic=False, num_modes=6, velocity_weight=0.3, 
-                 coverage_weight=0.5, use_augmentation=True):
+                 acceleration_weight=0.1, coverage_weight=0.5, collision_weight=0.05,
+                 use_augmentation=True, use_huber_loss=False, huber_delta=1.0):
         super().__init__()
         self.save_hyperparameters()
         
@@ -82,8 +150,12 @@ class NFLGraphPredictor(pl.LightningModule):
         self.lr = lr
         self.probabilistic = probabilistic
         self.velocity_weight = velocity_weight
+        self.acceleration_weight = acceleration_weight
         self.coverage_weight = coverage_weight
+        self.collision_weight = collision_weight
         self.use_augmentation = use_augmentation
+        self.use_huber_loss = use_huber_loss
+        self.huber_delta = huber_delta
 
     def forward(self, data):
         return self.model(data)
@@ -111,15 +183,27 @@ class NFLGraphPredictor(pl.LightningModule):
         else:
             predictions, cov_pred, _ = self(batch)
             
-            # MSE Loss
+            # Loss: MSE or Huber (P2)
             y = batch.y
-            loss_traj = F.mse_loss(predictions, y)
+            if self.use_huber_loss:
+                loss_traj = F.huber_loss(predictions, y, delta=self.huber_delta)
+            else:
+                loss_traj = F.mse_loss(predictions, y)
         
         self.log("train_traj_loss", loss_traj, batch_size=batch.num_graphs)
         
         # Velocity Loss
         loss_vel = velocity_loss(predictions, y)
         self.log("train_vel_loss", loss_vel, batch_size=batch.num_graphs)
+        
+        # Acceleration Loss (P1)
+        loss_acc = acceleration_loss(predictions, y)
+        self.log("train_acc_loss", loss_acc, batch_size=batch.num_graphs)
+        
+        # Collision Avoidance Loss (P1)
+        batch_idx = batch.batch if hasattr(batch, 'batch') else None
+        loss_collision = collision_avoidance_loss(predictions, batch_idx)
+        self.log("train_collision_loss", loss_collision, batch_size=batch.num_graphs)
         
         # Coverage Loss (BCE)
         loss_cov = torch.tensor(0.0, device=self.device)
@@ -128,8 +212,12 @@ class NFLGraphPredictor(pl.LightningModule):
             loss_cov = F.binary_cross_entropy_with_logits(cov_pred, target_cov)
             self.log("train_cov_loss", loss_cov, batch_size=batch.num_graphs)
              
-        # Total Loss (Weighted)
-        loss = loss_traj + self.velocity_weight * loss_vel + self.coverage_weight * loss_cov
+        # Total Loss (Weighted) - All P0/P1/P2 losses
+        loss = (loss_traj + 
+                self.velocity_weight * loss_vel + 
+                self.acceleration_weight * loss_acc +
+                self.collision_weight * loss_collision +
+                self.coverage_weight * loss_cov)
         self.log("train_loss", loss, batch_size=batch.num_graphs)
         return loss
         
@@ -140,11 +228,20 @@ class NFLGraphPredictor(pl.LightningModule):
         else:
             predictions, cov_pred, _ = self(batch)
         
-        y = batch.y
+        y = batch.y  # Relative targets
         
-        # Traj Validation
-        loss_traj = F.mse_loss(predictions, y)
-        disp = torch.sqrt(torch.sum((predictions - y)**2, dim=-1))  # [N, T]
+        # Convert predictions to absolute positions for metrics
+        if hasattr(batch, 'current_pos'):
+            current_pos = batch.current_pos.unsqueeze(1)  # [N, 1, 2]
+            pred_abs = predictions + current_pos  # Cumulative prediction
+            target_abs = y + current_pos
+        else:
+            pred_abs = predictions
+            target_abs = y
+        
+        # Traj Validation (on relative for loss, absolute for metrics)
+        loss_traj = F.mse_loss(predictions, y)  # Loss on relative predictions
+        disp = torch.sqrt(torch.sum((pred_abs - target_abs)**2, dim=-1))  # [N, T] - ADE/FDE on absolute
         
         # ADE: Average Displacement Error
         ade = torch.mean(disp)
@@ -186,18 +283,33 @@ class NFLGraphPredictor(pl.LightningModule):
             weight_decay=1e-4
         )
         
-        # Cosine Annealing with Warm Restarts
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        # Linear Warmup + Cosine Annealing
+        from torch.optim.lr_scheduler import LinearLR, CosineAnnealingWarmRestarts, SequentialLR
+        
+        warmup_scheduler = LinearLR(
+            optimizer, 
+            start_factor=0.1, 
+            end_factor=1.0,
+            total_iters=5
+        )
+        
+        cosine_scheduler = CosineAnnealingWarmRestarts(
             optimizer, 
             T_0=10,
             T_mult=2,
             eta_min=1e-6
         )
         
+        combined_scheduler = SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[5]
+        )
+        
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
-                "scheduler": scheduler,
+                "scheduler": combined_scheduler,
                 "interval": "epoch",
                 "frequency": 1
             }
@@ -247,7 +359,7 @@ def train_model(sanity=False, weeks=None, probabilistic=False):
     import polars as polars_df
     
     if weeks is None:
-        weeks = [1]
+        weeks = list(range(1, 19))  # All 18 weeks by default for best accuracy
     
     loader = DataLoader(".")
     all_graphs = []

@@ -7,32 +7,32 @@ This document details the complete data flow from raw CSV files to PyTorch Geome
 ```mermaid
 graph TB
     subgraph Raw_Data[Raw Data Sources]
-        Track["Tracking CSVs<br/>input_2023_w*.csv"]
-        Supp["Supplementary Data<br/>supplementary_data.csv"]
+        Track["Tracking CSVs: input_2023_w*.csv"]
+        Supp["Supplementary Data: supplementary_data.csv"]
     end
     
     subgraph Ingestion[Data Ingestion - Polars]
         Track --> LoadTrack[Load Tracking Data]
         Supp --> LoadPlays[Load Plays Data]
         LoadPlays --> Filter[Filter Nullified Plays]
-        LoadTrack --> Merge[Merge on game_id, play_id]
+        LoadTrack --> Merge["Merge on game_id, play_id"]
         Filter --> Merge
     end
     
     subgraph Preprocessing[Preprocessing]
-        Merge --> Standard[Standardize Directions<br/>Left-to-Right]
-        Standard --> EncodeRole[Encode Roles<br/>CB→0, WR→1, etc.]
-        EncodeRole --> EncodeForm[Encode Formation<br/>SHOTGUN→0, etc.]
-        EncodeForm --> NormWeight[Normalize Weight<br/>(w-200)/50]
-        NormWeight --> NormBox[Normalize Defenders<br/>(box-7)/2]
+        Merge --> Standard["Standardize Directions (Left-to-Right)"]
+        Standard --> EncodeRole["Encode Roles (CB→0, WR→1, etc.)"]
+        EncodeRole --> EncodeForm["Encode Formation (SHOTGUN→0, etc.)"]
+        EncodeForm --> NormWeight["Normalize Weight: (w-200)/50"]
+        NormWeight --> NormBox["Normalize Defenders: (box-7)/2"]
     end
     
     subgraph Graph_Construction[Graph Construction]
         NormBox --> Partition[Partition by Play]
-        Partition --> Pivot[Pivot to Tensor<br/>[Frames, Agents, Features]]
-        Pivot --> Window[Sliding Window<br/>Input: t, Target: t+1...t+10]
-        Window --> Edges[Create Edges<br/>Radius Graph r=20]
-        Edges --> EdgeAttr[Compute Edge Attributes<br/>Distance, Angle]
+        Partition --> Pivot["Pivot to Tensor [Frames, Agents, Features]"]
+        Pivot --> Window["Sliding Window: Input t, Target t+1...t+10"]
+        Window --> Edges["Create Edges: Radius Graph r=20"]
+        Edges --> EdgeAttr["Compute Edge Attributes: Distance, Angle"]
     end
     
     subgraph Output[Output]

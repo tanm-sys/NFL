@@ -16,39 +16,39 @@ The NFL Analytics Engine is a **Hybrid Graph-Transformer** model designed to sol
 ```mermaid
 graph TB
     subgraph Input_Layer[Input Layer]
-        Track[Tracking Data<br/>x, y, s, a, dir, o, w]
-        Context[Context<br/>down, dist, box]
-        Strategy[Strategic<br/>role, formation, alignment]
+        Track[Tracking Data - x, y, s, a, dir, o, w]
+        Context[Context - down, dist, box]
+        Strategy[Strategic - role, formation, alignment]
     end
     
     subgraph Embedding_Layer[Embedding Layer]
-        Track --> NodeEmb[Node Embedding<br/>Linear 7→64]
-        Context --> CtxEmb[Context Embedding<br/>Linear 3→64]
-        Strategy --> StratEmb[Strategic Embeddings<br/>role, formation, alignment]
+        Track --> NodeEmb[Node Embedding - Linear 7→64]
+        Context --> CtxEmb[Context Embedding - Linear 3→64]
+        Strategy --> StratEmb[Strategic Embeddings - role, formation, alignment]
     end
     
     subgraph Fusion[Feature Fusion]
         NodeEmb --> Fuse[Residual Fusion]
         CtxEmb --> Fuse
         StratEmb --> Fuse
-        Fuse --> FusedNode[Fused Node Features<br/>64-dim]
+        Fuse --> FusedNode[Fused Node Features - 64-dim]
     end
     
     subgraph GNN[4-Layer GNN Encoder]
-        FusedNode --> GAT1[GATv2 Layer 1<br/>+ Residual + LayerNorm]
-        GAT1 --> GAT2[GATv2 Layer 2<br/>+ Residual + LayerNorm]
-        GAT2 --> GAT3[GATv2 Layer 3<br/>+ Residual + LayerNorm]
-        GAT3 --> GAT4[GATv2 Layer 4<br/>+ Residual + LayerNorm]
-        GAT4 --> NodeRep[Node Representations<br/>64-dim]
+        FusedNode --> GAT1[GATv2 Layer 1 - + Residual + LayerNorm]
+        GAT1 --> GAT2[GATv2 Layer 2 - + Residual + LayerNorm]
+        GAT2 --> GAT3[GATv2 Layer 3 - + Residual + LayerNorm]
+        GAT3 --> GAT4[GATv2 Layer 4 - + Residual + LayerNorm]
+        GAT4 --> NodeRep[Node Representations - 64-dim]
     end
     
     subgraph Decoder[Multi-Task Heads]
-        NodeRep --> TrajDec[Trajectory Decoder<br/>Transformer]
-        TrajDec --> TrajOut[Trajectory Output<br/>Nx10x2]
+        NodeRep --> TrajDec[Trajectory Decoder - Transformer]
+        TrajDec --> TrajOut[Trajectory Output - Nx10x2]
         
         NodeRep --> Pool[Global Mean Pool]
-        Pool --> CovHead[Coverage Classifier<br/>Linear 64→1]
-        CovHead --> CovOut[Coverage Logits<br/>Bx1]
+        Pool --> CovHead[Coverage Classifier - Linear 64→1]
+        CovHead --> CovOut[Coverage Logits - Bx1]
     end
 ```
 
@@ -59,29 +59,29 @@ graph TB
 ```mermaid
 graph LR
     subgraph Node_Features[Node Features - Per Player]
-        X["x, y, s, a, dir, o, w<br/>[Total_Nodes, 7]"]
-        Role["role_id<br/>[Total_Nodes]"]
-        Side["side_id<br/>[Total_Nodes]"]
+        X["x, y, s, a, dir, o, w - [Total_Nodes, 7]"]
+        Role["role_id - [Total_Nodes]"]
+        Side["side_id - [Total_Nodes]"]
     end
     
     subgraph Graph_Features[Graph Features - Per Play]
-        Ctx["down, dist, box<br/>[Batch, 3]"]
-        Form["formation_id<br/>[Batch]"]
-        Align["alignment_id<br/>[Batch]"]
+        Ctx["down, dist, box - [Batch, 3]"]
+        Form["formation_id - [Batch]"]
+        Align["alignment_id - [Batch]"]
     end
     
     subgraph Edge_Features[Edge Features]
-        EdgeIdx["edge_index<br/>[2, Num_Edges]"]
-        EdgeAttr["distance, angle<br/>[Num_Edges, 2]"]
+        EdgeIdx["edge_index - [2, Num_Edges]"]
+        EdgeAttr["distance, angle - [Num_Edges, 2]"]
     end
     
-    X --> EmbX["Linear(7, 64)<br/>[Total_Nodes, 64]"]
-    Role --> EmbRole["Embedding(5, 64)<br/>[Total_Nodes, 64]"]
-    Side --> EmbSide["Embedding(3, 32)<br/>[Total_Nodes, 32]"]
+    X --> EmbX["Linear(7, 64) - [Total_Nodes, 64]"]
+    Role --> EmbRole["Embedding(5, 64) - [Total_Nodes, 64]"]
+    Side --> EmbSide["Embedding(3, 32) - [Total_Nodes, 32]"]
     
-    Ctx --> EmbCtx["Linear(3, 64)<br/>[Batch, 64]"]
-    Form --> EmbForm["Embedding(8, 64)<br/>[Batch, 64]"]
-    Align --> EmbAlign["Embedding(10, 64)<br/>[Batch, 64]"]
+    Ctx --> EmbCtx["Linear(3, 64) - [Batch, 64]"]
+    Form --> EmbForm["Embedding(8, 64) - [Batch, 64]"]
+    Align --> EmbAlign["Embedding(10, 64) - [Batch, 64]"]
 ```
 
 ### Embedding Fusion
@@ -133,12 +133,12 @@ The trajectory decoder uses a **Transformer architecture** to predict future pos
 
 ```mermaid
 graph TD
-    NodeEmb["Node Embeddings<br/>[Total_Nodes, 64]"] --> Expand["Repeat 10 times<br/>[Total_Nodes, 10, 64]"]
-    QueryPos["Query Position Embeddings<br/>[1, 10, 64]"] --> Expand
-    Expand --> Add["Element-wise Add<br/>[Total_Nodes, 10, 64]"]
-    Add --> Trans["Transformer Encoder<br/>2 layers, 4 heads"]
-    Trans --> Head["Linear(64, 2)<br/>[Total_Nodes, 10, 2]"]
-    Head --> Output["Trajectory Predictions<br/>Δx, Δy for 10 frames"]
+    NodeEmb["Node Embeddings - [Total_Nodes, 64]"] --> Expand["Repeat 10 times - [Total_Nodes, 10, 64]"]
+    QueryPos["Query Position Embeddings - [1, 10, 64]"] --> Expand
+    Expand --> Add["Element-wise Add - [Total_Nodes, 10, 64]"]
+    Add --> Trans["Transformer Encoder - 2 layers, 4 heads"]
+    Trans --> Head["Linear(64, 2) - [Total_Nodes, 10, 2]"]
+    Head --> Output["Trajectory Predictions - Δx, Δy for 10 frames"]
 ```
 
 **Key Features:**
@@ -154,13 +154,13 @@ The model optimizes two objectives simultaneously:
 graph TD
     subgraph Forward_Pass
         Input[Batch Data] --> Model[NFLGraphTransformer]
-        Model --> TrajPred["Trajectory Predictions<br/>[Total_Nodes, 10, 2]"]
-        Model --> CovPred["Coverage Logits<br/>[Batch, 1]"]
+        Model --> TrajPred["Trajectory Predictions - [Total_Nodes, 10, 2]"]
+        Model --> CovPred["Coverage Logits - [Batch, 1]"]
     end
     
     subgraph Ground_Truth
-        GTTraj["GT Trajectories<br/>[Total_Nodes, 10, 2]"]
-        GTCov["GT Coverage Labels<br/>[Batch]"]
+        GTTraj["GT Trajectories - [Total_Nodes, 10, 2]"]
+        GTCov["GT Coverage Labels - [Batch]"]
     end
     
     subgraph Loss_Computation
@@ -170,7 +170,7 @@ graph TD
         CovPred --> BCE["BCE with Logits Loss"]
         GTCov --> BCE
         
-        MSE --> Weighted["Weighted Sum<br/>L = L_traj + 0.5 * L_cov"]
+        MSE --> Weighted["Weighted Sum - L = L_traj + 0.5 * L_cov"]
         BCE --> Weighted
         Weighted --> TotalLoss["Total Loss"]
     end

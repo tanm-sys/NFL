@@ -238,16 +238,20 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
             if cov_label is not None:
                  coverage_tensor = torch.tensor([cov_label], dtype=torch.float)
         
-        # Pivot Features
-        feature_cols = ["std_x", "std_y", "s", "a", "std_dir", "std_o", "weight_norm", "role_id"]
+        # Pivot Features - now including side_id for team awareness
+        feature_cols = ["std_x", "std_y", "s", "a", "std_dir", "std_o", "weight_norm", "role_id", "side_id"]
         feature_matrices = []
         for col in feature_cols:
             val_fill = 0
             if col == "role_id": val_fill = 4
+            if col == "side_id": val_fill = 2  # Unknown side
+            if col not in pdf.columns:
+                # Create placeholder if column doesn't exist
+                pdf[col] = 0
             pivot = pdf.pivot(index='frame_id', columns='nfl_id', values=col).fillna(val_fill)
             feature_matrices.append(pivot.values)
             
-        # [Frames, Agents, Feats]
+        # [Frames, Agents, Feats] - now 9 features
         data_tensor = np.stack(feature_matrices, axis=-1)
         data_tensor = torch.FloatTensor(data_tensor)
         
@@ -256,34 +260,60 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
         # radius graph index helpers
         # Iterate Frames
         for t in range(num_frames - future_seq_len):
-            x_t = data_tensor[t] # [Agents, 8]
+            x_t = data_tensor[t]  # [Agents, 9]
             
-            # Extract Role (Last Col)
+            # Extract Role and Side (Last 2 Cols)
             role_t = x_t[:, 7].long()
+            side_t = x_t[:, 8].long()
             
             # Keep features up to weight (first 7)
             # x, y, s, a, dir, o, weight
             input_x = x_t[:, :7] 
-            pos_t = input_x[:, :2] # x, y
+            pos_t = input_x[:, :2]  # x, y
+            speed_t = input_x[:, 2]  # speed
+            dir_t = input_x[:, 4]    # direction
             
             # Future Targets
             y_t = data_tensor[t+1 : t+1+future_seq_len, :, :2]
             y_t = y_t.permute(1, 0, 2) 
             
-            # Edges
+            # Edges with RICHER FEATURES
             dist_matrix = torch.cdist(pos_t, pos_t)
             mask = (dist_matrix < radius) & (dist_matrix > 1e-5)
             edge_index = mask.nonzero().t()
             
-            row_idx, col_idx = edge_index
-            diff = pos_t[row_idx] - pos_t[col_idx]
-            dist = torch.norm(diff, p=2, dim=-1).view(-1, 1)
-            angle = torch.atan2(diff[:, 1], diff[:, 0]).view(-1, 1)
-            edge_attr = torch.cat([dist, angle], dim=-1)
+            if edge_index.shape[1] > 0:
+                row_idx, col_idx = edge_index
+                
+                # 1. Distance (normalized by radius)
+                diff = pos_t[row_idx] - pos_t[col_idx]
+                dist = torch.norm(diff, p=2, dim=-1).view(-1, 1) / radius
+                
+                # 2. Relative Angle
+                angle = torch.atan2(diff[:, 1], diff[:, 0]).view(-1, 1)
+                
+                # 3. Relative Velocity (speed difference)
+                rel_speed = (speed_t[row_idx] - speed_t[col_idx]).view(-1, 1)
+                
+                # 4. Relative Direction (direction difference, normalized to [-1, 1])
+                dir_diff = ((dir_t[row_idx] - dir_t[col_idx] + 180) % 360 - 180) / 180.0
+                rel_dir = dir_diff.view(-1, 1)
+                
+                # 5. Same-Team Indicator (1 if same team, 0 otherwise)
+                same_team = (side_t[row_idx] == side_t[col_idx]).float().view(-1, 1)
+                
+                # Combine: [dist, angle, rel_speed, rel_dir, same_team] = 5D edge features
+                edge_attr = torch.cat([dist, angle, rel_speed, rel_dir, same_team], dim=-1)
+            else:
+                edge_attr = torch.zeros((0, 5))
             
             data = Data(x=input_x, edge_index=edge_index, edge_attr=edge_attr, y=y_t, pos=pos_t)
             
+            # Add temporal encoding (normalized frame position)
+            data.frame_t = torch.tensor([t / num_frames], dtype=torch.float)
+            
             if role_t is not None: data.role = role_t
+            if side_t is not None: data.side = side_t
             if formation_tensor is not None: data.formation = formation_tensor
             if alignment_tensor is not None: data.alignment = alignment_tensor
             if context_tensor is not None: data.context = context_tensor
@@ -296,3 +326,4 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
             graph_list.append(data)
             
     return graph_list
+

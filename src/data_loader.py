@@ -67,13 +67,17 @@ class DataLoader:
         # TRACKING FEATURE ENCODING
         # Role Map
         role_map = {"Defensive Coverage": 0, "Other Route Runner": 1, "Passer": 2, "Targeted Receiver": 3}
+        side_map = {"Defense": 0, "Offense": 1}
         
         tracking_df = tracking_df.with_columns([
             # Role ID
             pl.col("player_role").replace(role_map, default=4).cast(pl.Int64).alias("role_id"),
             
             # Weight Norm ((w - 200) / 50)
-            ((pl.col("player_weight").cast(pl.Float32) - 200.0) / 50.0).alias("weight_norm")
+            ((pl.col("player_weight").cast(pl.Float32) - 200.0) / 50.0).alias("weight_norm"),
+            
+            # Player Side (Defense=0, Offense=1) for team-aware features
+            pl.col("player_side").replace(side_map, default=2).cast(pl.Int64).alias("side_id")
         ])
         
         # Inner join filters out the nullified plays from tracking data

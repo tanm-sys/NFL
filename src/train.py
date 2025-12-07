@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 import optuna
 from torch_geometric.loader import DataLoader as PyGDataLoader
 from src.models.gnn import NFLGraphTransformer
@@ -80,7 +81,29 @@ class NFLGraphPredictor(pl.LightningModule):
         return loss_traj # Return primary metric or total loss? Lightning uses this for checkpointing if monitored.
         
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.lr)
+        # AdamW with weight decay for regularization
+        optimizer = torch.optim.AdamW(
+            self.parameters(), 
+            lr=self.lr, 
+            weight_decay=1e-4
+        )
+        
+        # Cosine Annealing with Warm Restarts for better convergence
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer, 
+            T_0=10,  # Restart every 10 epochs
+            T_mult=2,  # Double the period after each restart
+            eta_min=1e-6  # Minimum learning rate
+        )
+        
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1
+            }
+        }
 
 def tune_model(num_trials=5):
     """
@@ -177,17 +200,39 @@ def train_model(sanity=False):
         # Model
         model = NFLGraphPredictor(input_dim=7, hidden_dim=64, lr=1e-3)
         
-        # Trainer
+        # Trainer with improved settings
         # Check if GPU available
         accelerator = "gpu" if torch.cuda.is_available() else "cpu"
         # Sanity: 1 epoch or even fewer steps?
         limit_train_batches = 1.0
+        max_epochs = 50 if not sanity else 1
         if sanity: limit_train_batches = 10 
         
-        trainer = pl.Trainer(max_epochs=1, 
-                             accelerator=accelerator, 
-                             log_every_n_steps=1 if sanity else 10,
-                             limit_train_batches=limit_train_batches if sanity else 1.0)
+        # Callbacks for early stopping and checkpointing
+        callbacks = [
+            EarlyStopping(
+                monitor='val_ade',
+                patience=7,
+                mode='min',
+                verbose=True
+            ),
+            ModelCheckpoint(
+                monitor='val_ade',
+                mode='min',
+                save_top_k=1,
+                filename='best-{epoch:02d}-{val_ade:.3f}'
+            )
+        ]
+        
+        trainer = pl.Trainer(
+            max_epochs=max_epochs, 
+            accelerator=accelerator, 
+            log_every_n_steps=1 if sanity else 10,
+            limit_train_batches=limit_train_batches if sanity else 1.0,
+            gradient_clip_val=1.0,  # Gradient clipping for stability
+            callbacks=callbacks if not sanity else [],
+            enable_progress_bar=True
+        )
         
         trainer.fit(model, train_loader, val_loader)
         

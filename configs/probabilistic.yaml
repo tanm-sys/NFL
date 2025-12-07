@@ -1,0 +1,100 @@
+# Probabilistic GMM Decoder Configuration
+# For uncertainty-aware trajectory prediction
+
+experiment_name: "nfl_probabilistic_gmm"
+description: "Probabilistic training with 6-mode GMM decoder"
+
+data:
+  data_dir: "."
+  weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  validate_data: true
+  radius: 20.0
+  future_seq_len: 10
+
+model:
+  input_dim: 7
+  hidden_dim: 64
+  num_gnn_layers: 4
+  heads: 4
+  dropout: 0.1
+  probabilistic: true  # Enable GMM decoder
+  num_modes: 6  # 6 trajectory modes
+  use_scene_encoder: true
+
+training:
+  batch_size: 24  # Slightly smaller due to GMM overhead
+  learning_rate: 0.0008  # Slightly lower for stability
+  max_epochs: 120
+  min_epochs: 15
+  num_workers: 4
+  accumulate_grad_batches: 1
+
+optimizer:
+  type: "adamw"
+  weight_decay: 0.0001
+
+lr_scheduler:
+  type: "cosine_warmup"
+  warmup_epochs: 8  # Longer warmup for GMM
+
+loss_weights:
+  trajectory: 1.0  # NLL loss for GMM
+  velocity: 0.2  # Reduced weight
+  acceleration: 0.1
+  collision: 0.05
+  coverage: 0.5
+
+regularization:
+  gradient_clip_val: 1.0
+  use_augmentation: true
+  use_huber_loss: false
+
+hardware:
+  precision: "16-mixed"
+  accelerator: "auto"
+  devices: "auto"
+  strategy: "auto"
+
+callbacks:
+  early_stopping:
+    enabled: true
+    patience: 12  # More patience for GMM
+    min_delta: 0.001
+    monitor: "val_ade"
+    mode: "min"
+  model_checkpoint:
+    save_top_k: 3
+    monitor: "val_ade"
+    mode: "min"
+    save_last: true
+
+logging:
+  use_mlflow: true
+  use_wandb: true
+  use_tensorboard: true
+  log_every_n_steps: 50
+
+paths:
+  checkpoint_dir: "./checkpoints_gmm"
+  log_dir: "./logs_gmm"
+  output_dir: "./outputs_gmm"
+
+reproducibility:
+  seed: 42
+  deterministic: true
+  benchmark: false
+
+production:
+  enable_profiling: false
+  export_onnx: true
+  export_torchscript: true
+  save_config: true
+
+thresholds:
+  target_val_ade: 2.3  # GMM should achieve better accuracy
+  target_val_fde: 3.8
+  target_val_miss_rate: 0.25
+  target_val_cov_acc: 0.82

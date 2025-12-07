@@ -1,11 +1,16 @@
+# ============================================================================
+# PRODUCTION-READY NFL ANALYTICS ENGINE DEPENDENCIES
+# ============================================================================
+
 # Core Data Processing
 polars>=0.20.0
 pandas>=2.0.0
 numpy>=1.24.0
 scipy>=1.10.0
 
-# Database
+# Database & Data Storage
 duckdb>=0.10.0
+pyarrow>=15.0.0
 
 # Machine Learning - Traditional
 xgboost>=2.0.0
@@ -17,32 +22,80 @@ pytorch-lightning>=2.3.3
 torch-geometric>=2.4.0
 torch-scatter>=2.1.2
 torch-sparse>=0.6.18
+torchmetrics>=1.3.0
 
 # Hyperparameter Optimization
 optuna>=3.5.0
+optuna-integration>=3.5.0
 
 # Geospatial
 h3>=3.7.6
 
-# Visualization
+# Visualization & Monitoring
 matplotlib>=3.8.0
 seaborn>=0.13.0
 plotly>=5.18.0
+tensorboard>=2.15.0
 
-# Experiment Tracking
+# Experiment Tracking & MLOps
 mlflow>=2.10.0
 wandb>=0.16.0
+tensorboardX>=2.6.0
+
+# Data Validation & Quality
+pydantic>=2.5.0
+pandera>=0.18.0
+great-expectations>=0.18.0
+
+# Logging & Progress
+tqdm>=4.66.0
+rich>=13.7.0
+loguru>=0.7.2
+
+# Configuration Management
+pyyaml>=6.0.1
+python-dotenv>=1.0.0
+hydra-core>=1.3.0
+omegaconf>=2.3.0
+
+# Model Optimization & Compression
+onnx>=1.15.0
+onnxruntime>=1.17.0
+torch-pruning>=1.3.0
+
+# Deployment & Serving
+fastapi>=0.109.0
+uvicorn>=0.27.0
+pydantic-settings>=2.1.0
+
+# Cloud Storage (for model artifacts)
+google-cloud-storage>=2.14.0
+boto3>=1.34.0
 
 # Jupyter Support
 jupyter>=1.0.0
 ipykernel>=6.29.0
 ipywidgets>=8.1.0
+jupyterlab>=4.0.0
 
 # Utilities
-tqdm>=4.66.0
-pyyaml>=6.0.1
-python-dotenv>=1.0.0
+python-dateutil>=2.8.2
+requests>=2.31.0
+psutil>=5.9.0
 
-# Testing (optional for Colab)
+# Testing & Quality Assurance
 pytest>=8.0.0
 pytest-cov>=4.1.0
+pytest-xdist>=3.5.0
+black>=24.1.0
+flake8>=7.0.0
+mypy>=1.8.0
+
+# Performance Profiling
+py-spy>=0.3.14
+memory-profiler>=0.61.0
+line-profiler>=4.1.0
+
+# Reproducibility
+pytorch-lightning[extra]>=2.3.3
+lightning-utilities>=0.10.0

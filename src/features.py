@@ -351,7 +351,8 @@ def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: in
             if formation_tensor is not None: data.formation = formation_tensor
             if alignment_tensor is not None: data.alignment = alignment_tensor
             if context_tensor is not None: data.context = context_tensor
-            if coverage_tensor is not None: data.y_coverage = coverage_tensor
+            # Always set y_coverage for consistent batching (-1.0 = unknown/missing)
+            data.y_coverage = coverage_tensor if coverage_tensor is not None else torch.tensor([-1.0], dtype=torch.float)
             if history_t is not None: data.history = history_t  # [Agents, H-1, 4]
             
             # Store play identifiers for train/val splitting

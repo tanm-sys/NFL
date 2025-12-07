@@ -205,12 +205,16 @@ class NFLGraphPredictor(pl.LightningModule):
         loss_collision = collision_avoidance_loss(predictions, batch_idx)
         self.log("train_collision_loss", loss_collision, batch_size=batch.num_graphs)
         
-        # Coverage Loss (BCE)
+        # Coverage Loss (BCE) - filter out missing coverage labels (sentinel value -1.0)
         loss_cov = torch.tensor(0.0, device=self.device)
         if hasattr(batch, 'y_coverage') and batch.y_coverage is not None:
             target_cov = batch.y_coverage.view(-1, 1)
-            loss_cov = F.binary_cross_entropy_with_logits(cov_pred, target_cov)
-            self.log("train_cov_loss", loss_cov, batch_size=batch.num_graphs)
+            valid_mask = (target_cov >= 0).squeeze()  # -1.0 = missing
+            if valid_mask.any():
+                loss_cov = F.binary_cross_entropy_with_logits(
+                    cov_pred[valid_mask], target_cov[valid_mask]
+                )
+                self.log("train_cov_loss", loss_cov, batch_size=valid_mask.sum())
              
         # Total Loss (Weighted) - All P0/P1/P2 losses
         loss = (loss_traj + 
@@ -258,20 +262,25 @@ class NFLGraphPredictor(pl.LightningModule):
         self.log("val_fde", fde, batch_size=batch.num_graphs)
         self.log("val_miss_rate_2yd", miss_rate, batch_size=batch.num_graphs)
         
-        # Coverage Validation
+        # Coverage Validation - filter out missing coverage labels (sentinel value -1.0)
         if self.probabilistic:
             _, _, cov_pred, _ = self.model(batch, return_distribution=True)
             
         if hasattr(batch, 'y_coverage') and batch.y_coverage is not None:
             target_cov = batch.y_coverage.view(-1, 1)
-            loss_cov = F.binary_cross_entropy_with_logits(cov_pred, target_cov)
-            self.log("val_loss_cov", loss_cov, batch_size=batch.num_graphs)
-             
-            # Accuracy
-            probs = torch.sigmoid(cov_pred)
-            preds = (probs > 0.5).float()
-            acc = (preds == target_cov).float().mean()
-            self.log("val_cov_acc", acc, batch_size=batch.num_graphs)
+            valid_mask = (target_cov >= 0).squeeze()  # -1.0 = missing
+            
+            if valid_mask.any():
+                loss_cov = F.binary_cross_entropy_with_logits(
+                    cov_pred[valid_mask], target_cov[valid_mask]
+                )
+                self.log("val_loss_cov", loss_cov, batch_size=valid_mask.sum())
+                 
+                # Accuracy
+                probs = torch.sigmoid(cov_pred[valid_mask])
+                preds = (probs > 0.5).float()
+                acc = (preds == target_cov[valid_mask]).float().mean()
+                self.log("val_cov_acc", acc, batch_size=valid_mask.sum())
              
         return loss_traj
         

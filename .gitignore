@@ -45,7 +45,6 @@ mlartifacts/
 wandb/
 
 # Model Files
-models/
 *.pt
 *.pth
 *.h5

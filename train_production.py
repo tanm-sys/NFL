@@ -82,14 +82,17 @@ torch.backends.cudnn.enabled = True     # Ensure cuDNN is enabled
 torch.backends.cuda.matmul.allow_tf32 = True  # Allow TF32 for faster matmuls
 torch.backends.cudnn.allow_tf32 = True  # Allow TF32 in cuDNN
 
-# Flag for torch.compile (PyTorch 2.0+ JIT compilation for 2x speedup)
-USE_TORCH_COMPILE = True
+# Flag for torch.compile (PyTorch 2.0+ JIT compilation)
+# DISABLED: torch.compile is incompatible with PyTorch Geometric
+# PyG dynamically clones tensors during batching which breaks CUDA graph capture
+# Even with cudagraphs=False, the inductor can still cause issues with PyG
+# Re-enable when PyG adds native torch.compile support
+USE_TORCH_COMPILE = False
 
-# CRITICAL: Disable CUDA graphs to fix compatibility with PyTorch Geometric
-# CUDA graphs can't handle PyG's dynamic tensor cloning during batching
-# This still allows torch.compile to work with Triton kernels for speedup
-import torch._inductor.config
-torch._inductor.config.triton.cudagraphs = False
+# Note: The following optimizations are still active and provide good speedup:
+# - TF32 matmul precision (line 77)
+# - cuDNN benchmark mode (line 80)
+# - Mixed precision training (bf16-mixed via Trainer)
 
 # Rich console for beautiful output
 console = Console()

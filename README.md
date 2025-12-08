@@ -26,7 +26,7 @@ A **state-of-the-art** deep learning system for NFL player trajectory prediction
 - **🦁 Lion Optimizer**: 15% faster convergence, less memory than AdamW
 - **📉 DropPath (Stochastic Depth)**: SOTA regularization from Vision Transformers
 - **🔄 SWA Integration**: Automatic weight averaging at 75% of training
-- **⚡ RTX 40 Optimizations**: bf16-mixed, TF32, Tensor Cores, torch.compile (CUDA graphs disabled for PyG compatibility)
+- **⚡ RTX 40 Optimizations**: bf16-mixed, TF32, Tensor Cores, cuDNN benchmark (torch.compile disabled for PyG compatibility)
 - **📦 New Libraries**: `lion-pytorch`, `einops`, `safetensors`, `timm`
 - **📊 Enhanced Logging**: Rich epoch summaries with GPU stats and ETA
 

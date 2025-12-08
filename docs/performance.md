@@ -144,22 +144,27 @@ trainer = pl.Trainer(
 
 #### 3. Compiled Models (PyTorch 2.0+)
 
+> [!CAUTION]
+> **Currently Disabled**: `torch.compile()` is incompatible with PyTorch Geometric. PyG dynamically clones tensors during batching, which causes CUDA graph capture failures even with `cudagraphs=False`. This will be re-enabled when PyG adds native torch.compile support.
+
 ```python
 import torch
-import torch._inductor.config
 
-# IMPORTANT: Disable CUDA graphs for PyTorch Geometric compatibility
-# CUDA graphs can't handle PyG's dynamic tensor cloning during batching
-torch._inductor.config.triton.cudagraphs = False
+# CURRENTLY DISABLED in train_production.py due to PyG incompatibility
+# model = torch.compile(model, mode="reduce-overhead")
 
-model = NFLGraphTransformer(input_dim=7, hidden_dim=64)
-model = torch.compile(model, mode="reduce-overhead")  # JIT compilation
-
-# Speedup: ~1.2-1.5x on inference (still works without CUDA graphs)
+# Alternative optimizations still active:
+# - TF32 matmul precision
+# - cuDNN benchmark mode  
+# - bf16-mixed precision training
 ```
 
-> [!NOTE]
-> **PyTorch Geometric Compatibility**: CUDA graphs must be disabled when using `torch.compile()` with PyG models. CUDA graphs capture tensor operations but fail when PyG clones tensors during data batching. The fix (`cudagraphs = False`) still allows Triton kernel fusion for ~1.5x speedup.
+**Workaround for non-PyG models:**
+```python
+import torch._inductor.config
+torch._inductor.config.triton.cudagraphs = False  # May help in some cases
+model = torch.compile(model, mode="reduce-overhead")
+```
 
 #### 4. DataLoader Optimization
 

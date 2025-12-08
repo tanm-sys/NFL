@@ -29,7 +29,7 @@ import argparse
 import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 
 import torch
@@ -70,14 +70,19 @@ warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 # ============================================================================
-# HARDWARE OPTIMIZATIONS FOR RTX 3050 (Tensor Cores + cuDNN)
+# HARDWARE OPTIMIZATIONS FOR RTX 4050 (Ada Lovelace Architecture)
 # ============================================================================
-# Enable Tensor Cores for FP16/FP32 operations - 'high' balances speed + quality
+# Enable Tensor Cores - 'high' for best quality/speed balance on RTX 40 series
 torch.set_float32_matmul_precision('high')
 
-# Enable cuDNN optimizations
-torch.backends.cudnn.benchmark = True  # Auto-tune for best convolution algorithms
-torch.backends.cudnn.enabled = True    # Ensure cuDNN is enabled
+# Enable cuDNN optimizations for maximum GPU utilization
+torch.backends.cudnn.benchmark = True   # Auto-tune convolution algorithms
+torch.backends.cudnn.enabled = True     # Ensure cuDNN is enabled
+torch.backends.cuda.matmul.allow_tf32 = True  # Allow TF32 for faster matmuls
+torch.backends.cudnn.allow_tf32 = True  # Allow TF32 in cuDNN
+
+# Flag for torch.compile (PyTorch 2.0+ JIT compilation for 2x speedup)
+USE_TORCH_COMPILE = True
 
 # Rich console for beautiful output
 console = Console()
@@ -221,6 +226,158 @@ class DataValidator:
         
         is_valid = len(issues) == 0
         return is_valid, issues
+
+
+class EpochSummaryCallback(pl.Callback):
+    """
+    Custom callback for detailed, clean epoch summaries.
+    Displays training progress, metrics, GPU stats, and time estimates.
+    """
+    
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.epoch_start_time = None
+        self.training_start_time = None
+        self.best_val_ade = float('inf')
+        self.best_epoch = 0
+        self.epoch_times = []
+        
+    def on_train_start(self, trainer, pl_module):
+        """Called when training begins."""
+        self.training_start_time = datetime.now()
+        
+        # Print training header
+        console.print("\n" + "="*70, style="bold cyan")
+        console.print("🏈 NFL ANALYTICS ENGINE - TRAINING STARTED", style="bold white", justify="center")
+        console.print("="*70, style="bold cyan")
+        
+        # GPU Info
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1e9
+            console.print(f"\n🖥️  GPU: {gpu_name} ({gpu_mem:.1f} GB)", style="green")
+        
+        # Model info
+        total_params = sum(p.numel() for p in pl_module.parameters())
+        console.print(f"🧠 Model: {total_params:,} parameters", style="green")
+        console.print(f"📊 Batch Size: {self.config.batch_size} | LR: {self.config.learning_rate}", style="green")
+        console.print(f"🎯 Target: val_ade < {self.config.monitor_metric} with patience={self.config.early_stopping_patience}", style="green")
+        console.print("")
+        
+    def on_train_epoch_start(self, trainer, pl_module):
+        """Called at the start of each training epoch."""
+        self.epoch_start_time = datetime.now()
+        
+    def on_train_epoch_end(self, trainer, pl_module):
+        """Called at the end of each training epoch - before validation."""
+        pass  # We'll log after validation
+        
+    def on_validation_epoch_end(self, trainer, pl_module):
+        """Called at the end of validation - display epoch summary."""
+        if trainer.sanity_checking:
+            return
+            
+        epoch = trainer.current_epoch
+        epoch_time = (datetime.now() - self.epoch_start_time).total_seconds()
+        self.epoch_times.append(epoch_time)
+        
+        # Get metrics
+        metrics = trainer.callback_metrics
+        train_loss = metrics.get('train_loss', 0)
+        val_ade = metrics.get('val_ade', 0)
+        val_fde = metrics.get('val_fde', 0)
+        val_miss = metrics.get('val_miss_rate_2yd', 0)
+        val_cov = metrics.get('val_cov_acc', 0)
+        lr = trainer.optimizers[0].param_groups[0]['lr']
+        
+        # Track best
+        is_best = False
+        if val_ade < self.best_val_ade and val_ade > 0:
+            self.best_val_ade = val_ade
+            self.best_epoch = epoch
+            is_best = True
+        
+        # Calculate progress
+        progress_pct = (epoch + 1) / trainer.max_epochs * 100
+        avg_epoch_time = sum(self.epoch_times) / len(self.epoch_times)
+        remaining_epochs = trainer.max_epochs - epoch - 1
+        eta_seconds = remaining_epochs * avg_epoch_time
+        eta_str = str(timedelta(seconds=int(eta_seconds)))
+        
+        # GPU Memory
+        gpu_mem_used = 0
+        gpu_util = 0
+        if torch.cuda.is_available():
+            gpu_mem_used = torch.cuda.memory_allocated(0) / 1e9
+            gpu_mem_total = torch.cuda.get_device_properties(0).total_memory / 1e9
+            gpu_util = (gpu_mem_used / gpu_mem_total) * 100
+        
+        # Create summary table
+        console.print("")
+        console.print("─" * 70, style="dim")
+        
+        # Epoch header with progress bar
+        progress_bar = "█" * int(progress_pct / 5) + "░" * (20 - int(progress_pct / 5))
+        best_marker = "⭐ NEW BEST!" if is_best else ""
+        console.print(f"📈 Epoch {epoch:03d}/{trainer.max_epochs} [{progress_bar}] {progress_pct:.1f}% {best_marker}", 
+                     style="bold green" if is_best else "bold white")
+        
+        # Metrics table
+        table = Table(show_header=True, header_style="bold magenta", box=None, padding=(0, 2))
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", justify="right")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", justify="right")
+        
+        table.add_row(
+            "Train Loss", f"{float(train_loss):.4f}",
+            "Val ADE", f"[{'green' if is_best else 'white'}]{float(val_ade):.4f} yds[/]"
+        )
+        table.add_row(
+            "Val FDE", f"{float(val_fde):.4f} yds",
+            "Miss Rate", f"{float(val_miss)*100:.1f}%"
+        )
+        table.add_row(
+            "Coverage Acc", f"{float(val_cov)*100:.1f}%",
+            "Learning Rate", f"{lr:.2e}"
+        )
+        table.add_row(
+            "GPU Memory", f"{gpu_mem_used:.1f}/{gpu_mem_total:.1f} GB ({gpu_util:.0f}%)" if torch.cuda.is_available() else "N/A",
+            "Epoch Time", f"{epoch_time:.1f}s"
+        )
+        table.add_row(
+            "Best ADE", f"[green]{self.best_val_ade:.4f}[/] (ep {self.best_epoch})",
+            "ETA", f"{eta_str}"
+        )
+        
+        console.print(table)
+        console.print("─" * 70, style="dim")
+        
+    def on_train_end(self, trainer, pl_module):
+        """Called when training ends."""
+        total_time = datetime.now() - self.training_start_time
+        
+        console.print("\n" + "="*70, style="bold green")
+        console.print("✅ TRAINING COMPLETE", style="bold white", justify="center")
+        console.print("="*70, style="bold green")
+        
+        # Final summary table
+        table = Table(title="📊 Final Results", show_header=True, header_style="bold magenta")
+        table.add_column("Metric", style="cyan")
+        table.add_column("Value", justify="right", style="green")
+        
+        table.add_row("Best val_ade", f"{self.best_val_ade:.4f} yards")
+        table.add_row("Best Epoch", str(self.best_epoch))
+        table.add_row("Total Epochs", str(trainer.current_epoch + 1))
+        table.add_row("Total Time", str(total_time).split('.')[0])
+        table.add_row("Avg Epoch Time", f"{sum(self.epoch_times)/len(self.epoch_times):.1f}s")
+        
+        if torch.cuda.is_available():
+            table.add_row("Peak GPU Memory", f"{torch.cuda.max_memory_allocated(0)/1e9:.2f} GB")
+        
+        console.print(table)
+        console.print("")
 
 
 class ProductionTrainer:
@@ -457,6 +614,14 @@ class ProductionTrainer:
             huber_delta=self.config.huber_delta
         )
         
+        # Apply torch.compile for 2x speedup on RTX 4050 (PyTorch 2.0+)
+        if USE_TORCH_COMPILE:
+            try:
+                model = torch.compile(model, mode="reduce-overhead")
+                logger.info("torch.compile enabled - expect 2x speedup after warmup")
+            except Exception as e:
+                logger.warning(f"torch.compile failed, using eager mode: {e}")
+        
         # Log model summary
         total_params = sum(p.numel() for p in model.parameters())
         trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -496,11 +661,12 @@ class ProductionTrainer:
             
             # Model summary
             RichModelSummary(max_depth=2),
+            
+            # Custom epoch summary with rich logging
+            EpochSummaryCallback(self.config),
         ]
         
-        # Device stats (GPU monitoring)
-        if torch.cuda.is_available():
-            callbacks.append(DeviceStatsMonitor())
+        # Note: DeviceStatsMonitor removed - replaced by EpochSummaryCallback for cleaner output
         
         # Note: Gradient accumulation is handled via Trainer's accumulate_grad_batches parameter
         # Do NOT use GradientAccumulationScheduler callback as it conflicts with the Trainer arg

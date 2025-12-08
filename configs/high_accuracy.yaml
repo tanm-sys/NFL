@@ -1,11 +1,11 @@
 # ============================================================================
-# HIGH-ACCURACY TRAINING CONFIGURATION
+# HIGH-ACCURACY + MAXIMUM SPEED CONFIGURATION
 # ============================================================================
-# Optimized for maximum accuracy without overfitting/underfitting.
-# Best suited for Google Colab with T4/A100 GPUs.
+# Optimized for RTX 3050 Laptop GPU (4GB VRAM) - Maximum GPU utilization
+# Best accuracy without overfitting/underfitting
 
-experiment_name: "nfl_high_accuracy"
-description: "Maximum accuracy training with advanced regularization"
+experiment_name: "nfl_high_accuracy_fast"
+description: "Maximum accuracy + speed training for RTX 3050"
 
 # Data Configuration
 data:
@@ -14,71 +14,71 @@ data:
   train_split: 0.8
   val_split: 0.1
   test_split: 0.1
-  validate_data: true
+  validate_data: false       # Skip validation for speed
   radius: 20.0
   future_seq_len: 10
 
-# Model Architecture (Larger for better accuracy)
+# Model Architecture
 model:
   input_dim: 7
-  hidden_dim: 128           # Increased from 64
-  num_gnn_layers: 6         # Increased from 4
-  heads: 8                  # Increased from 4
-  dropout: 0.15             # Slightly higher for regularization
+  hidden_dim: 128
+  num_gnn_layers: 6
+  heads: 8
+  dropout: 0.15
   probabilistic: false
   num_modes: 6
   use_scene_encoder: true
 
-# Training Configuration
+# Training Configuration - SPEED OPTIMIZED
 training:
-  batch_size: 64            # Larger batch for stable gradients
-  learning_rate: 0.0005     # Slightly lower for stability
-  max_epochs: 150           # More epochs with early stopping
-  min_epochs: 20            # Ensure minimum training
-  num_workers: 2            # Safe for Colab
-  accumulate_grad_batches: 2  # Effective batch size = 128
+  batch_size: 128            # Larger batch = faster (fits RTX 3050)
+  learning_rate: 0.001       # Higher LR with larger batch
+  max_epochs: 150
+  min_epochs: 20
+  num_workers: 4             # Match CPU cores for data loading
+  accumulate_grad_batches: 1 # No accumulation for speed
 
 # Optimization
 optimizer:
   type: "adamw"
-  weight_decay: 0.0001      # L2 regularization
+  weight_decay: 0.0001
   betas: [0.9, 0.999]
   eps: 1.0e-08
 
-# Learning Rate Scheduler (Warmup + Cosine with Restarts)
+# Learning Rate Scheduler
 lr_scheduler:
   type: "cosine_warmup"
-  warmup_epochs: 5
-  min_lr: 1.0e-07           # Lower minimum for fine-tuning
+  warmup_epochs: 3           # Shorter warmup
+  min_lr: 1.0e-06
 
-# Loss Weights (Balanced multi-task learning)
+# Loss Weights
 loss_weights:
   trajectory: 1.0
-  velocity: 0.3             # Smooth trajectories
-  acceleration: 0.15        # Physically plausible motion
-  collision: 0.05           # Player separation
-  coverage: 0.5             # Coverage prediction
+  velocity: 0.3
+  acceleration: 0.15
+  collision: 0.05
+  coverage: 0.5
 
-# Regularization (Anti-overfitting)
+# Regularization
 regularization:
   gradient_clip_val: 1.0
-  use_augmentation: true    # Data augmentation ON
-  use_huber_loss: true      # Robust to outliers
+  use_augmentation: true
+  use_huber_loss: true
   huber_delta: 1.0
-  label_smoothing: 0.05     # Prevent overconfidence
+  label_smoothing: 0.05
 
-# Hardware Configuration (Colab GPU optimized)
+# Hardware Configuration - MAXIMUM GPU SPEED
 hardware:
-  precision: "16-mixed"     # Mixed precision for speed + memory
-  accelerator: "auto"
-  devices: "auto"
+  precision: "16-mixed"      # FP16 for 2x speed
+  accelerator: "gpu"         # Force GPU
+  devices: 1
   strategy: "auto"
 
-# Callbacks (Anti-overfitting)
+# Callbacks
 callbacks:
   early_stopping:
     enabled: true
-    patience: 15            # More patience for convergence
+    patience: 12             # Slightly less patience for faster finish
     min_delta: 0.0005
     monitor: "val_ade"
     mode: "min"
@@ -89,12 +89,12 @@ callbacks:
     mode: "min"
     save_last: true
 
-# Experiment Tracking
+# Experiment Tracking - Minimal for speed
 logging:
-  use_mlflow: false         # Disable for Colab simplicity
-  use_wandb: false          # Disable for Colab simplicity
-  use_tensorboard: true     # TensorBoard works great on Colab
-  log_every_n_steps: 25
+  use_mlflow: false
+  use_wandb: false
+  use_tensorboard: true
+  log_every_n_steps: 50
 
 # Paths
 paths:
@@ -102,22 +102,22 @@ paths:
   log_dir: "./logs"
   output_dir: "./outputs"
 
-# Reproducibility
+# Reproducibility - SPEED MODE (disable deterministic)
 reproducibility:
   seed: 42
-  deterministic: true
-  benchmark: false
+  deterministic: false       # Disable for ~20% speed boost
+  benchmark: true            # Enable cuDNN autotuning
 
-# Production Features
+# Production
 production:
   enable_profiling: false
   export_onnx: true
   export_torchscript: true
   save_config: true
 
-# Target Metrics (Competition goals)
+# Target Metrics
 thresholds:
-  target_val_ade: 1.8       # Aggressive target
-  target_val_fde: 3.2
-  target_val_miss_rate: 0.20
-  target_val_cov_acc: 0.85
+  target_val_ade: 1.5
+  target_val_fde: 2.8
+  target_val_miss_rate: 0.15
+  target_val_cov_acc: 0.88

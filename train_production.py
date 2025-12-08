@@ -492,13 +492,8 @@ class ProductionTrainer:
         if torch.cuda.is_available():
             callbacks.append(DeviceStatsMonitor())
         
-        # Gradient accumulation schedule
-        if self.config.accumulate_grad_batches > 1:
-            callbacks.append(
-                GradientAccumulationScheduler(
-                    scheduling={0: self.config.accumulate_grad_batches}
-                )
-            )
+        # Note: Gradient accumulation is handled via Trainer's accumulate_grad_batches parameter
+        # Do NOT use GradientAccumulationScheduler callback as it conflicts with the Trainer arg
         
         return callbacks
     

@@ -5,6 +5,35 @@ from torch_geometric.nn import GATv2Conv, GlobalAttention, global_mean_pool
 from torch_geometric.data import Data, Batch
 from torch_geometric.utils import scatter
 
+# Try to import einops for cleaner tensor operations
+try:
+    from einops import rearrange, repeat
+    EINOPS_AVAILABLE = True
+except ImportError:
+    EINOPS_AVAILABLE = False
+
+
+class DropPath(nn.Module):
+    """
+    Stochastic Depth (DropPath) - SOTA regularization technique.
+    Randomly drops entire residual paths during training.
+    Used in Vision Transformers, ConvNeXt, and modern architectures.
+    """
+    def __init__(self, drop_prob: float = 0.0):
+        super().__init__()
+        self.drop_prob = drop_prob
+        
+    def forward(self, x):
+        if self.drop_prob == 0. or not self.training:
+            return x
+        keep_prob = 1 - self.drop_prob
+        # Work with different tensor shapes
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+        random_tensor.floor_()  # Binarize
+        output = x.div(keep_prob) * random_tensor
+        return output
+
 
 class TemporalHistoryEncoder(nn.Module):
     """
@@ -284,9 +313,11 @@ class HierarchicalDecoder(nn.Module):
 class GraphPlayerEncoder(nn.Module):
     """
     Encodes player spatial state + Strategic Features.
-    Enhanced with 4 GATv2 layers, residual connections, and dropout.
+    Enhanced with GATv2 layers, residual connections, DropPath, and dropout.
+    SOTA architecture used in competition-winning models.
     """
-    def __init__(self, input_dim=7, hidden_dim=64, heads=4, context_dim=3, edge_dim=5, num_layers=4, dropout=0.1):
+    def __init__(self, input_dim=7, hidden_dim=64, heads=4, context_dim=3, edge_dim=5, 
+                 num_layers=4, dropout=0.1, droppath_rate=0.1):
         super().__init__()
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
@@ -312,7 +343,7 @@ class GraphPlayerEncoder(nn.Module):
         # Temporal Encoding (frame position in play)
         self.temporal_emb = nn.Embedding(100, hidden_dim)
         
-        # 4-Layer Graph Attention Network with residual connections
+        # Multi-Layer Graph Attention Network with residual connections
         self.gat_layers = nn.ModuleList([
             GATv2Conv(hidden_dim, hidden_dim, heads=heads, concat=False, edge_dim=edge_dim)
             for _ in range(num_layers)
@@ -323,10 +354,18 @@ class GraphPlayerEncoder(nn.Module):
             nn.LayerNorm(hidden_dim) for _ in range(num_layers)
         ])
         
+        # DropPath (Stochastic Depth) - SOTA regularization
+        # Linearly increase drop probability through layers
+        drop_rates = [droppath_rate * i / (num_layers - 1) for i in range(num_layers)]
+        self.drop_paths = nn.ModuleList([
+            DropPath(drop_rate) if drop_rate > 0. else nn.Identity()
+            for drop_rate in drop_rates
+        ])
+        
         # Social Pooling Layer
         self.social_pooling = SocialPoolingLayer(hidden_dim)
         
-        # Temporal History Encoder (NEW - P1)
+        # Temporal History Encoder (P1)
         self.history_encoder = TemporalHistoryEncoder(input_dim=4, hidden_dim=hidden_dim)
         
         # Dropout for regularization
@@ -390,9 +429,9 @@ class GraphPlayerEncoder(nn.Module):
             if history_emb is not None:
                 h = h + history_emb
         
-        # Multi-Layer GNN with Residual Connections
+        # Multi-Layer GNN with Residual Connections + DropPath
         attn_weights = None
-        for i, (gat, norm) in enumerate(zip(self.gat_layers, self.layer_norms)):
+        for i, (gat, norm, drop_path) in enumerate(zip(self.gat_layers, self.layer_norms, self.drop_paths)):
             h_res = h
             
             # Last layer can return attention weights
@@ -404,6 +443,7 @@ class GraphPlayerEncoder(nn.Module):
             
             h = F.relu(h)
             h = self.dropout(h)
+            h = drop_path(h)  # Stochastic depth
             h = norm(h + h_res)  # Residual + LayerNorm
         
         # Apply Social Pooling (NEW)

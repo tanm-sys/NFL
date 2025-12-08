@@ -27,6 +27,12 @@ torchmetrics>=1.4.0
 optuna>=3.5.0
 optuna-integration>=3.5.0
 
+# SOTA Training Libraries (NEW)
+lion-pytorch>=0.1.2         # Lion optimizer - faster than AdamW
+einops>=0.7.0               # Clean tensor operations
+safetensors>=0.4.0          # Fast model checkpointing (10x faster)
+timm>=0.9.0                 # Advanced vision utilities & optimizers
+
 # Geospatial
 h3>=3.7.6
 

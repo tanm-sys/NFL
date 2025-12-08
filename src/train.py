@@ -285,14 +285,31 @@ class NFLGraphPredictor(pl.LightningModule):
         return loss_traj
         
     def configure_optimizers(self):
-        # AdamW with weight decay
-        optimizer = torch.optim.AdamW(
-            self.parameters(), 
-            lr=self.lr, 
-            weight_decay=1e-4
-        )
+        """
+        Configure optimizer with Lion (SOTA) or AdamW fallback.
+        Lion uses ~3x lower LR and higher weight decay than AdamW.
+        """
+        # Try Lion optimizer (faster convergence, less memory)
+        try:
+            from lion_pytorch import Lion
+            # Lion uses lower LR (0.3x) and higher weight decay (10x) than AdamW
+            optimizer = Lion(
+                self.parameters(), 
+                lr=self.lr * 0.3,  # Scale down LR for Lion
+                weight_decay=0.01,  # Higher weight decay for Lion
+                betas=(0.9, 0.99)
+            )
+            print("🦁 Using Lion optimizer (SOTA)")
+        except ImportError:
+            # Fallback to AdamW
+            optimizer = torch.optim.AdamW(
+                self.parameters(), 
+                lr=self.lr, 
+                weight_decay=1e-4
+            )
+            print("📈 Using AdamW optimizer")
         
-        # Linear Warmup + Cosine Annealing
+        # Linear Warmup + Cosine Annealing with Restarts
         from torch.optim.lr_scheduler import LinearLR, CosineAnnealingWarmRestarts, SequentialLR
         
         warmup_scheduler = LinearLR(
@@ -306,7 +323,7 @@ class NFLGraphPredictor(pl.LightningModule):
             optimizer, 
             T_0=10,
             T_mult=2,
-            eta_min=1e-6
+            eta_min=1e-7
         )
         
         combined_scheduler = SequentialLR(

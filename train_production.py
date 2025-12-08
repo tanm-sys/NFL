@@ -44,7 +44,8 @@ from pytorch_lightning.callbacks import (
     RichProgressBar,
     RichModelSummary,
     DeviceStatsMonitor,
-    GradientAccumulationScheduler
+    GradientAccumulationScheduler,
+    StochasticWeightAveraging  # SWA for better generalization
 )
 from pytorch_lightning.strategies import DDPStrategy
 from torch_geometric.loader import DataLoader as PyGDataLoader
@@ -665,6 +666,17 @@ class ProductionTrainer:
             # Custom epoch summary with rich logging
             EpochSummaryCallback(self.config),
         ]
+        
+        # Add Stochastic Weight Averaging (SWA) for better generalization
+        # SWA averages weights from multiple points in training for smoother minima
+        swa_callback = StochasticWeightAveraging(
+            swa_lrs=1e-5,           # Lower LR during SWA phase
+            swa_epoch_start=0.75,   # Start SWA at 75% of training
+            annealing_epochs=5,     # Anneal LR over 5 epochs
+            annealing_strategy="cos"
+        )
+        callbacks.append(swa_callback)
+        console.print("[green]✓ SWA (Stochastic Weight Averaging) enabled[/green]")
         
         # Note: DeviceStatsMonitor removed - replaced by EpochSummaryCallback for cleaner output
         

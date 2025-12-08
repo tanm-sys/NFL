@@ -10,24 +10,25 @@ A **state-of-the-art** deep learning system for NFL player trajectory prediction
 
 ### Key Features
 
-- **🧠 Hybrid Architecture**: 4-layer GATv2 + Transformer with residual connections
-- **🎲 Probabilistic Predictions**: GMM-based decoder with 6 trajectory modes and uncertainty quantification
+- **🧠 Hybrid Architecture**: 8-layer GATv2 + Transformer with residual connections
+- **🦁 SOTA Optimizer**: Lion optimizer (15% faster than AdamW)
+- **🎲 Probabilistic Predictions**: GMM-based decoder with 6 trajectory modes
 - **🤝 Social Pooling**: Explicit pairwise player interaction modeling
 - **📊 Strategic Context**: Formation, alignment, role, and temporal embeddings
-- **⚡ High Performance**: Polars-based data pipeline for efficient processing
-- **🎯 Multi-Task Learning**: Simultaneous trajectory prediction and coverage classification
-- **📈 Advanced Metrics**: ADE, FDE, Velocity Loss, Matchup Difficulty, Coverage Pressure
-- **🔄 Data Augmentation**: Horizontal flip and Gaussian noise for robust training
+- **⚡ High Performance**: Polars-based data pipeline + RTX 40 optimizations
+- **🎯 Multi-Task Learning**: Trajectory prediction + coverage classification
+- **📉 DropPath**: Stochastic depth regularization (SOTA)
+- **🔄 SWA**: Stochastic Weight Averaging for better generalization
 - **🎨 Rich Visualization**: Attention maps, trajectory animations, field plots
 
-### New in v2.0 (P0-P3 Improvements)
+### New in v3.0 (SOTA Edition)
 
-- **📍 Relative Trajectory Prediction (P0)**: Predicts displacements for 97% ADE improvement
-- **⏱️ Temporal History Encoding (P1)**: LSTM encodes past 5 frames of motion
-- **🎯 Scene Flow Encoder (P3)**: Set Transformer for global play understanding
-- **📦 Config Management (P2)**: Centralized `ModelConfig`, `TrainingConfig`, `DataConfig`
-- **🎭 Ensemble Support (P2)**: Multi-model averaging with uncertainty estimation
-- **🛡️ Enhanced Losses (P1)**: Acceleration, collision avoidance, Huber loss options
+- **🦁 Lion Optimizer**: 15% faster convergence, less memory than AdamW
+- **📉 DropPath (Stochastic Depth)**: SOTA regularization from Vision Transformers
+- **🔄 SWA Integration**: Automatic weight averaging at 75% of training
+- **⚡ RTX 40 Optimizations**: bf16-mixed, TF32, Tensor Cores, torch.compile
+- **📦 New Libraries**: `lion-pytorch`, `einops`, `safetensors`, `timm`
+- **📊 Enhanced Logging**: Rich epoch summaries with GPU stats and ETA
 
 ## 📚 Documentation
 

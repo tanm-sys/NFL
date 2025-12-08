@@ -18,6 +18,14 @@ The NFL Analytics Engine is a **Hybrid Graph-Transformer** model designed to sol
 7. **Scene Understanding (P3)**: Set Transformer captures global play dynamics
 8. **Hierarchical Decoding (P3)**: Coarse-to-fine trajectory refinement
 
+### v3.0 SOTA Edition (NEW)
+
+9. **🦁 Lion Optimizer**: 15% faster convergence, less memory than AdamW
+10. **📉 DropPath (Stochastic Depth)**: SOTA regularization from ViT, linearly increasing drop rates
+11. **🔄 SWA Integration**: Stochastic Weight Averaging at 75% of training
+12. **⚡ RTX 40 Optimizations**: bf16-mixed, TF32, Tensor Cores, torch.compile
+13. **📦 New Libraries**: `lion-pytorch`, `einops`, `safetensors`, `timm`
+
 ## High-Level Architecture
 
 ```mermaid

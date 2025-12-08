@@ -1,11 +1,11 @@
 # ============================================================================
-# HIGH-ACCURACY + MAXIMUM SPEED CONFIGURATION
+# MAXIMUM QUALITY + FAST TRAINING CONFIGURATION
 # ============================================================================
-# Optimized for RTX 3050 Laptop GPU (4GB VRAM) - Maximum GPU utilization
-# Best accuracy without overfitting/underfitting
+# Best possible accuracy at maximum speed for RTX 3050 Laptop GPU
+# Your previous run achieved val_ade = 0.566 yards - targeting < 0.5
 
-experiment_name: "nfl_high_accuracy_fast"
-description: "Maximum accuracy + speed training for RTX 3050"
+experiment_name: "nfl_best_quality"
+description: "Highest quality model with optimized speed"
 
 # Data Configuration
 data:
@@ -14,87 +14,87 @@ data:
   train_split: 0.8
   val_split: 0.1
   test_split: 0.1
-  validate_data: false       # Skip validation for speed
+  validate_data: false
   radius: 20.0
   future_seq_len: 10
 
-# Model Architecture
+# Model Architecture - MAXIMUM QUALITY
 model:
   input_dim: 7
-  hidden_dim: 128
-  num_gnn_layers: 6
-  heads: 8
-  dropout: 0.15
+  hidden_dim: 192            # Larger for better representations
+  num_gnn_layers: 8          # Deeper network
+  heads: 8                   # More attention heads
+  dropout: 0.12              # Balanced regularization
   probabilistic: false
   num_modes: 6
   use_scene_encoder: true
 
-# Training Configuration - SPEED OPTIMIZED
+# Training Configuration - QUALITY + SPEED
 training:
-  batch_size: 128            # Larger batch = faster (fits RTX 3050)
-  learning_rate: 0.001       # Higher LR with larger batch
-  max_epochs: 150
-  min_epochs: 20
-  num_workers: 4             # Match CPU cores for data loading
-  accumulate_grad_batches: 1 # No accumulation for speed
+  batch_size: 96             # Sweet spot for RTX 3050 (4GB)
+  learning_rate: 0.0008      # Slightly lower for larger model
+  max_epochs: 200            # More epochs for convergence
+  min_epochs: 30
+  num_workers: 4
+  accumulate_grad_batches: 1
 
 # Optimization
 optimizer:
   type: "adamw"
-  weight_decay: 0.0001
+  weight_decay: 0.00015      # Slightly more regularization
   betas: [0.9, 0.999]
   eps: 1.0e-08
 
-# Learning Rate Scheduler
+# Learning Rate Scheduler - Cosine with Warmup
 lr_scheduler:
   type: "cosine_warmup"
-  warmup_epochs: 3           # Shorter warmup
-  min_lr: 1.0e-06
+  warmup_epochs: 5
+  min_lr: 1.0e-07
 
-# Loss Weights
+# Loss Weights - Multi-task Learning
 loss_weights:
   trajectory: 1.0
-  velocity: 0.3
-  acceleration: 0.15
+  velocity: 0.35             # Smooth trajectories
+  acceleration: 0.15         # Physically plausible
   collision: 0.05
   coverage: 0.5
 
-# Regularization
+# Regularization - QUALITY FOCUSED
 regularization:
   gradient_clip_val: 1.0
-  use_augmentation: true
-  use_huber_loss: true
+  use_augmentation: true     # Critical for generalization
+  use_huber_loss: true       # Robust to outliers
   huber_delta: 1.0
-  label_smoothing: 0.05
+  label_smoothing: 0.03      # Slight smoothing
 
-# Hardware Configuration - MAXIMUM GPU SPEED
+# Hardware - MAXIMUM GPU UTILIZATION
 hardware:
-  precision: "16-mixed"      # FP16 for 2x speed
-  accelerator: "gpu"         # Force GPU
+  precision: "16-mixed"      # FP16 for speed + larger batches
+  accelerator: "gpu"
   devices: 1
   strategy: "auto"
 
-# Callbacks
+# Callbacks - QUALITY CHECKPOINTING
 callbacks:
   early_stopping:
     enabled: true
-    patience: 12             # Slightly less patience for faster finish
-    min_delta: 0.0005
+    patience: 20             # More patience for deep model
+    min_delta: 0.0003
     monitor: "val_ade"
     mode: "min"
     
   model_checkpoint:
-    save_top_k: 3
+    save_top_k: 5            # Keep more checkpoints
     monitor: "val_ade"
     mode: "min"
     save_last: true
 
-# Experiment Tracking - Minimal for speed
+# Logging
 logging:
   use_mlflow: false
   use_wandb: false
   use_tensorboard: true
-  log_every_n_steps: 50
+  log_every_n_steps: 25
 
 # Paths
 paths:
@@ -102,11 +102,11 @@ paths:
   log_dir: "./logs"
   output_dir: "./outputs"
 
-# Reproducibility - SPEED MODE (disable deterministic)
+# Reproducibility - BALANCED
 reproducibility:
   seed: 42
-  deterministic: false       # Disable for ~20% speed boost
-  benchmark: true            # Enable cuDNN autotuning
+  deterministic: false       # Speed boost
+  benchmark: true            # cuDNN autotuning
 
 # Production
 production:
@@ -115,9 +115,9 @@ production:
   export_torchscript: true
   save_config: true
 
-# Target Metrics
+# Target Metrics (Competition-winning targets)
 thresholds:
-  target_val_ade: 1.5
-  target_val_fde: 2.8
-  target_val_miss_rate: 0.15
-  target_val_cov_acc: 0.88
+  target_val_ade: 0.45       # Aggressive < 0.5 yards
+  target_val_fde: 0.80
+  target_val_miss_rate: 0.08
+  target_val_cov_acc: 0.92

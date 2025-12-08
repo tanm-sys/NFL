@@ -146,12 +146,20 @@ trainer = pl.Trainer(
 
 ```python
 import torch
+import torch._inductor.config
+
+# IMPORTANT: Disable CUDA graphs for PyTorch Geometric compatibility
+# CUDA graphs can't handle PyG's dynamic tensor cloning during batching
+torch._inductor.config.triton.cudagraphs = False
 
 model = NFLGraphTransformer(input_dim=7, hidden_dim=64)
-model = torch.compile(model)  # JIT compilation
+model = torch.compile(model, mode="reduce-overhead")  # JIT compilation
 
-# Speedup: ~1.2-1.5x on inference
+# Speedup: ~1.2-1.5x on inference (still works without CUDA graphs)
 ```
+
+> [!NOTE]
+> **PyTorch Geometric Compatibility**: CUDA graphs must be disabled when using `torch.compile()` with PyG models. CUDA graphs capture tensor operations but fail when PyG clones tensors during data batching. The fix (`cudagraphs = False`) still allows Triton kernel fusion for ~1.5x speedup.
 
 #### 4. DataLoader Optimization
 

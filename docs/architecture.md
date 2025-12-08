@@ -49,12 +49,12 @@ graph TB
         Fuse --> FusedNode[Fused Node Features - 64-dim]
     end
     
-    subgraph GNN[4-Layer GNN Encoder]
-        FusedNode --> GAT1[GATv2 Layer 1 - + Residual + LayerNorm]
-        GAT1 --> GAT2[GATv2 Layer 2 - + Residual + LayerNorm]
-        GAT2 --> GAT3[GATv2 Layer 3 - + Residual + LayerNorm]
-        GAT3 --> GAT4[GATv2 Layer 4 - + Residual + LayerNorm]
-        GAT4 --> NodeRep[Node Representations - 64-dim]
+    subgraph GNN[Multi-Layer GNN Encoder - 4 to 8 layers]
+        FusedNode --> GAT1[GATv2 Layer 1 - + Residual + LayerNorm + DropPath]
+        GAT1 --> GAT2[GATv2 Layer 2 - + Residual + LayerNorm + DropPath]
+        GAT2 --> GATN[... More GATv2 Layers ...]
+        GATN --> GATF[GATv2 Layer N - + Residual + LayerNorm + DropPath]
+        GATF --> NodeRep[Node Representations - hidden_dim]
     end
     
     subgraph Decoder[Multi-Task Heads]
@@ -87,7 +87,7 @@ graph LR
     
     subgraph Edge_Features[Edge Features]
         EdgeIdx["edge_index - [2, Num_Edges]"]
-        EdgeAttr["distance, angle - [Num_Edges, 2]"]
+        EdgeAttr["distance, angle, rel_speed, rel_dir, same_team - [Num_Edges, 5]"]
     end
     
     X --> EmbX["Linear(7, 64) - [Total_Nodes, 64]"]
@@ -116,16 +116,22 @@ Where `Broadcast` expands graph-level embeddings to each node using the batch in
 
 ### Graph Attention Network
 
-The model uses **4 stacked GATv2 layers** with residual connections:
+The model uses **configurable stacked GATv2 layers** (default 4, up to 8) with residual connections and **DropPath (Stochastic Depth)** regularization:
 
 ```python
-for i in range(4):
+for i in range(num_gnn_layers):
     h_residual = h
-    h = GATv2Conv(h, edge_index, edge_attr)
+    h = GATv2Conv(h, edge_index, edge_attr)  # edge_attr is 5D
     h = ReLU(h)
     h = Dropout(h, p=0.1)
+    h = DropPath(h, drop_prob=i * droppath_rate / (num_layers - 1))  # SOTA regularization
     h = LayerNorm(h + h_residual)  # Residual connection
 ```
+
+**DropPath** (Stochastic Depth):
+- Randomly drops entire residual paths during training
+- Drop probability increases linearly through layers
+- Used in Vision Transformers, ConvNeXt, and modern architectures
 
 **GATv2 Attention Mechanism:**
 
@@ -135,7 +141,7 @@ $$\alpha_{ij} = \frac{\exp(\text{LeakyReLU}(\mathbf{a}^T [\mathbf{W}h_i \| \math
 
 Where:
 - $h_i, h_j$ are node features
-- $\mathbf{e}_{ij}$ are edge attributes (distance, angle)
+- $\mathbf{e}_{ij}$ are edge attributes (distance, angle, rel_speed, rel_dir, same_team - 5D)
 - $\mathbf{W}$ is learnable weight matrix
 - $\mathbf{a}$ is attention parameter vector
 
@@ -208,12 +214,14 @@ Where:
 **Input Dimensions:**
 - `x`: `[Total_Nodes, 7]` - Node features (x, y, s, a, dir, o, w)
 - `edge_index`: `[2, Num_Edges]` - Graph connectivity
-- `edge_attr`: `[Num_Edges, 2]` - Edge features (distance, angle)
+- `edge_attr`: `[Num_Edges, 5]` - Edge features (distance, angle, rel_speed, rel_dir, same_team)
 - `context`: `[Batch, 3]` - Game context (down, dist, box)
 - `role`: `[Total_Nodes]` - Player role IDs (0-4)
 - `side`: `[Total_Nodes]` - Team side IDs (0-2)
 - `formation`: `[Batch]` - Formation IDs (0-7)
 - `alignment`: `[Batch]` - Alignment IDs (0-9)
+- `frame_t`: `[Batch]` - Normalized frame position in play
+- `history`: `[Total_Nodes, T, 4]` - Motion history (vel_x, vel_y, acc_x, acc_y)
 - `batch`: `[Total_Nodes]` - Batch assignment vector
 
 **Architecture:**
@@ -223,9 +231,10 @@ GraphPlayerEncoder(
     hidden_dim=64,
     heads=4,
     context_dim=3,
-    edge_dim=2,
-    num_layers=4,
-    dropout=0.1
+    edge_dim=5,           # 5D edge features
+    num_layers=4,         # Configurable: 4-8 layers
+    dropout=0.1,
+    droppath_rate=0.1     # SOTA: Stochastic Depth
 )
 ```
 
@@ -288,9 +297,12 @@ Edges are created using a **radius graph** approach:
 
 1. **Compute pairwise distances** between all players in a frame
 2. **Create edges** where distance < 20 yards
-3. **Compute edge attributes**:
+3. **Compute edge attributes** (5D):
    - **Distance**: Euclidean distance in yards
    - **Relative angle**: Angle from player i to player j
+   - **Relative speed**: Speed difference between players
+   - **Relative direction**: Direction difference
+   - **Same team**: Binary indicator (1 if same team, 0 otherwise)
 
 ```python
 # Radius graph construction
@@ -301,43 +313,50 @@ edge_index = radius_graph(
     loop=False    # No self-loops
 )
 
-```
-# Edge attributes
-edge_attr = compute_edge_features(positions, edge_index)
-# Returns [Num_Edges, 2]: [distance, angle]
+# Edge attributes (5D)
+edge_attr = compute_edge_features(positions, velocities, team_ids, edge_index)
+# Returns [Num_Edges, 5]: [distance, angle, rel_speed, rel_dir, same_team]
 ```
 
 ## Model Capacity
 
-**Parameter Count (v2.0 with P0-P3):**
+**Parameter Count (v3.0 SOTA Edition):**
 
 | Component | Parameters | Description |
 |-----------|-----------|-------------|
 | Node Embedding | 448 | Linear(7, 64) |
 | Role Embedding | 320 | Embedding(5, 64) |
 | Side Embedding | 96 | Embedding(3, 32) |
-| Context Encoder | 192 | Linear(3, 64) |
+| Temporal Embedding | 6,400 | Embedding(100, 64) |
+| Context Encoder | 256 | Linear(3, 64) |
 | Formation Embedding | 512 | Embedding(8, 64) |
 | Alignment Embedding | 640 | Embedding(10, 64) |
-| GATv2 Layers (×4) | ~65K | 4 layers with residual |
-| Layer Norms (×4) | 512 | 4 × LayerNorm(64) |
+| GATv2 Layers (×4-8) | ~65K-130K | Configurable depth with DropPath |
+| Layer Norms | 512-1024 | LayerNorm per layer |
+| DropPath layers | 0 | Only modifies forward pass |
+| SocialPoolingLayer | ~24K | Gated pairwise interactions |
 | **TemporalHistoryEncoder (P1)** | ~33K | 2-layer LSTM for motion history |
 | **SceneFlowEncoder (P3)** | ~25K | Set Transformer with inducing points |
+| GoalConditionedDecoder (P3) | ~45K | Goal proposals + trajectory decoder |
+| HierarchicalDecoder (P3) | ~20K | Coarse-to-fine prediction |
 | Trajectory Decoder | ~33K | Transformer + head |
 | Coverage Classifier | 65 | Linear(64, 1) |
-| **Total** | **~810K** | Full model with P1/P3 |
+| **Total** | **~810K - 1.2M** | Depends on configuration |
 
 ## Training Configuration
 
-**Optimizer:** Adam
-- Learning rate: 1e-3 (tunable)
-- Weight decay: 1e-5
+**Optimizer (v3.0 SOTA):** Lion (preferred) or AdamW
+- Lion: ~3x lower LR, ~3x higher weight decay
+- Learning rate: 1e-3 (AdamW) or 3e-4 (Lion)
+- Weight decay: 1e-4 (AdamW) or 0.01 (Lion)
 
 **Regularization:**
-- Dropout: 0.1 (in GNN layers)
+- Dropout: 0.1-0.15 (in GNN layers)
+- **DropPath (Stochastic Depth)**: 0.1 rate, linearly increasing through layers
 - Layer normalization after each GATv2 layer
+- **SWA (Stochastic Weight Averaging)**: Enabled at 75% of training
 
-**Batch Size:** 32 graphs (adjustable based on GPU memory)
+**Batch Size:** 32-160 graphs (adjustable based on GPU memory, 160 optimal for RTX 4050 with bf16)
 
 **Training Strategy:**
 1. Load data with Polars DataLoader

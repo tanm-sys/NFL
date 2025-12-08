@@ -90,7 +90,7 @@ graph LR
     Input[Tracking Data] --> Loader[Polars DataLoader]
     Loader --> Features[Feature Engineering]
     Features --> Graph[Graph Construction]
-    Graph --> GNN[4-Layer GATv2]
+    Graph --> GNN[4-8 Layer GATv2]
     GNN --> Decoder[Transformer Decoder]
     Decoder --> Trajectory[Trajectory Prediction]
     GNN --> Pool[Global Pooling]
@@ -99,8 +99,8 @@ graph LR
 
 ### Model Components
 
-1. **GraphPlayerEncoder**: 4-layer GATv2 with strategic embeddings
-   - Residual connections and layer normalization
+1. **GraphPlayerEncoder**: Configurable 4-8 layer GATv2 with strategic embeddings
+   - Residual connections, layer normalization, and DropPath (Stochastic Depth)
    - Role, side, formation, alignment, and temporal embeddings
    - **Social Pooling Layer**: Gated pairwise interaction aggregation
    - Edge attributes: distance, angle, relative speed, relative direction, same-team indicator (5D)

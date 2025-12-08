@@ -169,18 +169,19 @@ from src.models.gnn import NFLGraphTransformer
 
 @pytest.fixture
 def mock_graph():
-    """Create mock graph for testing"""
+    \"\"\"Create mock graph for testing\"\"\"
     return Data(
         x=torch.randn(23, 7),
         edge_index=torch.randint(0, 23, (2, 100)),
-        edge_attr=torch.randn(100, 2),
+        edge_attr=torch.randn(100, 5),  # 5D edge features
         role=torch.randint(0, 5, (23,)),
         side=torch.randint(0, 3, (23,)),
         formation=torch.tensor([0]),
         alignment=torch.tensor([1]),
         context=torch.randn(1, 3),
         y=torch.randn(23, 10, 2),
-        y_coverage=torch.tensor([1])
+        y_coverage=torch.tensor([1]),
+        history=torch.randn(23, 5, 4)  # Motion history
     )
 
 def test_model_forward(mock_graph):

@@ -121,18 +121,22 @@ Convert DataFrame into list of PyG Data objects (graphs).
 **Returns:**
 - `List[Data]`: List of PyTorch Geometric Data objects
 
+**Edge Attribute Shape:** `[Num_Edges, 5]`
+
 **Data Object Structure:**
 ```python
 Data(
     x=[N, 7],              # Node features
     edge_index=[2, E],     # Edge connectivity
-    edge_attr=[E, 2],      # Edge features
+    edge_attr=[E, 5],      # Edge features (5D)
     y=[N, 10, 2],          # Target trajectory
+    history=[N, T, 4],     # Motion history (vel_x, vel_y, acc_x, acc_y)
     role=[N],              # Role IDs
     side=[N],              # Side IDs
     formation=[1],         # Formation ID
     alignment=[1],         # Alignment ID
     context=[1, 3],        # Context vector
+    frame_t=[1],           # Normalized frame position
     y_coverage=[1]         # Coverage label
 )
 ```
@@ -194,8 +198,11 @@ class NFLGraphTransformer(nn.Module):
         hidden_dim: int = 64,
         heads: int = 4,
         future_seq_len: int = 10,
-        edge_dim: int = 2,
-        num_gnn_layers: int = 4
+        edge_dim: int = 5,         # 5D edge features
+        num_gnn_layers: int = 4,   # Configurable: 4-8
+        probabilistic: bool = False,
+        num_modes: int = 6,
+        use_scene_encoder: bool = True  # P3 Scene Flow Encoder
     )
 ```
 
@@ -204,8 +211,11 @@ class NFLGraphTransformer(nn.Module):
 - `hidden_dim` (int): Hidden embedding dimension (default: 64)
 - `heads` (int): Number of attention heads (default: 4)
 - `future_seq_len` (int): Prediction horizon in frames (default: 10)
-- `edge_dim` (int): Edge feature dimension (default: 2)
-- `num_gnn_layers` (int): Number of GNN layers (default: 4)
+- `edge_dim` (int): Edge feature dimension (default: 5)
+- `num_gnn_layers` (int): Number of GNN layers (default: 4, range: 4-8)
+- `probabilistic` (bool): Use GMM decoder (default: False)
+- `num_modes` (int): Number of trajectory modes for GMM (default: 6)
+- `use_scene_encoder` (bool): Enable P3 Scene Flow Encoder (default: True)
 
 #### Methods
 
@@ -262,9 +272,10 @@ class GraphPlayerEncoder(nn.Module):
 - `hidden_dim` (int): Hidden dimension
 - `heads` (int): Attention heads
 - `context_dim` (int): Context feature dimension
-- `edge_dim` (int): Edge feature dimension
-- `num_layers` (int): Number of GATv2 layers
+- `edge_dim` (int): Edge feature dimension (default: 5)
+- `num_layers` (int): Number of GATv2 layers (default: 4)
 - `dropout` (float): Dropout rate
+- `droppath_rate` (float): Stochastic Depth drop rate (default: 0.1)
 
 #### Methods
 

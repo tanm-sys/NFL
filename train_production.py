@@ -85,6 +85,12 @@ torch.backends.cudnn.allow_tf32 = True  # Allow TF32 in cuDNN
 # Flag for torch.compile (PyTorch 2.0+ JIT compilation for 2x speedup)
 USE_TORCH_COMPILE = True
 
+# CRITICAL: Disable CUDA graphs to fix compatibility with PyTorch Geometric
+# CUDA graphs can't handle PyG's dynamic tensor cloning during batching
+# This still allows torch.compile to work with Triton kernels for speedup
+import torch._inductor.config
+torch._inductor.config.triton.cudagraphs = False
+
 # Rich console for beautiful output
 console = Console()
 

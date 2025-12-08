@@ -112,10 +112,11 @@ NFLGraphTransformer(
     hidden_dim=64,         # Hidden embedding dimension
     heads=4,               # Number of attention heads
     future_seq_len=10,     # Prediction horizon (fixed)
-    edge_dim=5,            # Edge feature dimension (fixed) - UPDATED
-    num_gnn_layers=4,      # Number of GNN layers
+    edge_dim=5,            # Edge feature dimension (fixed) - 5D
+    num_gnn_layers=4,      # Number of GNN layers (4-8)
     probabilistic=False,   # Use GMM decoder - NEW
-    num_modes=6            # Number of trajectory modes - NEW
+    num_modes=6,           # Number of trajectory modes - NEW
+    use_scene_encoder=True # Use P3 Scene Flow Encoder
 )
 ```
 
@@ -126,9 +127,10 @@ NFLGraphTransformer(
 | `heads` | 4 | 2-8 | GATv2 attention heads | More heads = multi-perspective reasoning |
 | `future_seq_len` | 10 | **Fixed** | Future frames to predict (1.0s @ 10Hz) | Prediction horizon |
 | `edge_dim` | 5 | **Fixed** | Edge features: dist, angle, rel_speed, rel_dir, same_team | Fixed by graph construction |
-| `num_gnn_layers` | 4 | 2-6 | Number of GATv2 layers | Deeper = larger receptive field |
+| `num_gnn_layers` | 4 | 2-8 | Number of GATv2 layers | Deeper = larger receptive field |
 | `probabilistic` | False | bool | Use GMM decoder instead of deterministic | Enables uncertainty quantification |
 | `num_modes` | 6 | 3-10 | Number of trajectory modes (GMM only) | More modes = more diverse predictions |
+| `use_scene_encoder` | True | bool | Enable P3 Scene Flow Encoder | Global play understanding |
 
 ### GraphPlayerEncoder
 
@@ -140,9 +142,10 @@ GraphPlayerEncoder(
     hidden_dim=64,
     heads=4,
     context_dim=3,         # Context features: down, dist, box
-    edge_dim=2,
-    num_layers=4,
-    dropout=0.1            # Dropout rate
+    edge_dim=5,            # 5D edge features
+    num_layers=4,          # Configurable: 4-8 layers
+    dropout=0.1,           # Dropout rate
+    droppath_rate=0.1      # SOTA: Stochastic Depth regularization
 )
 ```
 

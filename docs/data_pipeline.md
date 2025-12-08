@@ -307,30 +307,44 @@ edge_index = torch.tensor([
 
 #### 4.4 Edge Attributes
 
-**Compute geometric features for each edge:**
+**Compute geometric and relational features for each edge (5D):**
 
 ```python
-def compute_edge_features(positions, edge_index):
+def compute_edge_features(positions, velocities, team_ids, edge_index):
     # Extract source and target positions
     src_pos = positions[edge_index[0]]  # [E, 2]
     tgt_pos = positions[edge_index[1]]  # [E, 2]
     
-    # Euclidean distance
+    # 1. Euclidean distance
     diff = tgt_pos - src_pos
     distance = torch.norm(diff, dim=1)  # [E]
     
-    # Relative angle
+    # 2. Relative angle
     angle = torch.atan2(diff[:, 1], diff[:, 0])  # [E]
     
+    # 3. Relative speed (target - source)
+    src_speed = velocities[edge_index[0]]
+    tgt_speed = velocities[edge_index[1]]
+    rel_speed = tgt_speed - src_speed  # [E]
+    
+    # 4. Relative direction difference
+    rel_dir = direction[edge_index[1]] - direction[edge_index[0]]  # [E]
+    
+    # 5. Same team indicator
+    same_team = (team_ids[edge_index[0]] == team_ids[edge_index[1]]).float()  # [E]
+    
     # Stack as edge attributes
-    edge_attr = torch.stack([distance, angle], dim=1)  # [E, 2]
+    edge_attr = torch.stack([distance, angle, rel_speed, rel_dir, same_team], dim=1)  # [E, 5]
     
     return edge_attr
 ```
 
-**Edge Attributes:**
+**Edge Attributes (5D):**
 - **Distance**: Euclidean distance in yards (0-20)
 - **Angle**: Relative angle in radians (-π to π)
+- **Relative Speed**: Speed difference between players (yards/sec)
+- **Relative Direction**: Direction angle difference (radians)
+- **Same Team**: Binary indicator (1 if same team, 0 otherwise)
 
 ### 5. PyG Data Object Construction
 
@@ -346,11 +360,14 @@ data = Data(
     # Edge connectivity [2, E]
     edge_index=edge_index,
     
-    # Edge attributes [E, 2]
+    # Edge attributes [E, 5] - 5D edge features
     edge_attr=edge_attr,
     
-    # Target trajectory [N, 10, 2]
+    # Target trajectory [N, 10, 2] - relative displacements
     y=target_trajectory,
+    
+    # Motion history for temporal encoding [N, T, 4]
+    history=motion_history,  # vel_x, vel_y, acc_x, acc_y
     
     # Strategic features
     role=role_ids,              # [N]
@@ -360,6 +377,9 @@ data = Data(
     
     # Context features [1, 3]
     context=context_vector,     # [down, dist, box_norm]
+    
+    # Frame position in play
+    frame_t=frame_position,     # [1] normalized 0-1
     
     # Coverage label [1]
     y_coverage=coverage_label,

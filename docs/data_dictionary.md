@@ -80,8 +80,11 @@ Edge features capture pairwise relationships between players within the interact
 |---------|------|-------|-------------|-------------|
 | `distance` | Float32 | 0-20 | Euclidean distance (yards) | $\sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}$ |
 | `angle` | Float32 | -π to π | Relative angle (radians) | $\arctan2(y_j - y_i, x_j - x_i)$ |
+| `rel_speed` | Float32 | -25 to 25 | Relative speed difference | $s_j - s_i$ |
+| `rel_dir` | Float32 | -π to π | Relative direction difference | $\text{angle\_diff}(dir_j, dir_i)$ |
+| `same_team` | Float32 | 0 or 1 | Same team indicator | $1$ if same team, $0$ otherwise |
 
-**Edge Attribute Shape:** `[Num_Edges, 2]`
+**Edge Attribute Shape:** `[Num_Edges, 5]`
 
 ### Edge Construction
 

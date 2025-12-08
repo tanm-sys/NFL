@@ -91,6 +91,11 @@ echo ""
 echo -e "${YELLOW}[7/8] Installing project dependencies...${NC}"
 pip install -r requirements.txt
 pip install -e .
+
+# Install SOTA training libraries (v3.0)
+echo "   Installing SOTA libraries (Lion, einops, safetensors, timm)..."
+pip install lion-pytorch einops safetensors timm
+
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 echo ""
 

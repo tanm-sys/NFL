@@ -69,6 +69,11 @@ echo ""
 # Step 5: Install project
 echo -e "${YELLOW}[5/8] Installing NFL Analytics Engine...${NC}"
 pip install -q -e .
+
+# Install SOTA training libraries (v3.0)
+echo "Installing SOTA libraries (Lion, einops, safetensors, timm)..."
+pip install -q lion-pytorch einops safetensors timm
+
 echo -e "${GREEN}✓ Project installed${NC}"
 echo ""
 

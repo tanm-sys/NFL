@@ -1,0 +1,123 @@
+# ============================================================================
+# HIGH-ACCURACY TRAINING CONFIGURATION
+# ============================================================================
+# Optimized for maximum accuracy without overfitting/underfitting.
+# Best suited for Google Colab with T4/A100 GPUs.
+
+experiment_name: "nfl_high_accuracy"
+description: "Maximum accuracy training with advanced regularization"
+
+# Data Configuration
+data:
+  data_dir: "."
+  weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+  train_split: 0.8
+  val_split: 0.1
+  test_split: 0.1
+  validate_data: true
+  radius: 20.0
+  future_seq_len: 10
+
+# Model Architecture (Larger for better accuracy)
+model:
+  input_dim: 7
+  hidden_dim: 128           # Increased from 64
+  num_gnn_layers: 6         # Increased from 4
+  heads: 8                  # Increased from 4
+  dropout: 0.15             # Slightly higher for regularization
+  probabilistic: false
+  num_modes: 6
+  use_scene_encoder: true
+
+# Training Configuration
+training:
+  batch_size: 64            # Larger batch for stable gradients
+  learning_rate: 0.0005     # Slightly lower for stability
+  max_epochs: 150           # More epochs with early stopping
+  min_epochs: 20            # Ensure minimum training
+  num_workers: 2            # Safe for Colab
+  accumulate_grad_batches: 2  # Effective batch size = 128
+
+# Optimization
+optimizer:
+  type: "adamw"
+  weight_decay: 0.0001      # L2 regularization
+  betas: [0.9, 0.999]
+  eps: 1.0e-08
+
+# Learning Rate Scheduler (Warmup + Cosine with Restarts)
+lr_scheduler:
+  type: "cosine_warmup"
+  warmup_epochs: 5
+  min_lr: 1.0e-07           # Lower minimum for fine-tuning
+
+# Loss Weights (Balanced multi-task learning)
+loss_weights:
+  trajectory: 1.0
+  velocity: 0.3             # Smooth trajectories
+  acceleration: 0.15        # Physically plausible motion
+  collision: 0.05           # Player separation
+  coverage: 0.5             # Coverage prediction
+
+# Regularization (Anti-overfitting)
+regularization:
+  gradient_clip_val: 1.0
+  use_augmentation: true    # Data augmentation ON
+  use_huber_loss: true      # Robust to outliers
+  huber_delta: 1.0
+  label_smoothing: 0.05     # Prevent overconfidence
+
+# Hardware Configuration (Colab GPU optimized)
+hardware:
+  precision: "16-mixed"     # Mixed precision for speed + memory
+  accelerator: "auto"
+  devices: "auto"
+  strategy: "auto"
+
+# Callbacks (Anti-overfitting)
+callbacks:
+  early_stopping:
+    enabled: true
+    patience: 15            # More patience for convergence
+    min_delta: 0.0005
+    monitor: "val_ade"
+    mode: "min"
+    
+  model_checkpoint:
+    save_top_k: 3
+    monitor: "val_ade"
+    mode: "min"
+    save_last: true
+
+# Experiment Tracking
+logging:
+  use_mlflow: false         # Disable for Colab simplicity
+  use_wandb: false          # Disable for Colab simplicity
+  use_tensorboard: true     # TensorBoard works great on Colab
+  log_every_n_steps: 25
+
+# Paths
+paths:
+  checkpoint_dir: "./checkpoints"
+  log_dir: "./logs"
+  output_dir: "./outputs"
+
+# Reproducibility
+reproducibility:
+  seed: 42
+  deterministic: true
+  benchmark: false
+
+# Production Features
+production:
+  enable_profiling: false
+  export_onnx: true
+  export_torchscript: true
+  save_config: true
+
+# Target Metrics (Competition goals)
+thresholds:
+  target_val_ade: 1.8       # Aggressive target
+  target_val_fde: 3.2
+  target_val_miss_rate: 0.20
+  target_val_cov_acc: 0.85

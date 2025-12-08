@@ -1,11 +1,13 @@
 # ============================================================================
-# MAXIMUM QUALITY + FAST TRAINING CONFIGURATION
+# OPTIMIZED QUALITY CONFIG - ANTI-OVERFITTING + HARDWARE OPTIMIZED
 # ============================================================================
-# Best possible accuracy at maximum speed for RTX 3050 Laptop GPU
-# Your previous run achieved val_ade = 0.566 yards - targeting < 0.5
+# Based on analysis: Previous run showed overfitting signs at epoch 21
+# (val_ade increased 0.566 → 0.576). This config prevents that.
+#
+# RTX 3050 (4GB VRAM) Hardware Optimizations Applied.
 
-experiment_name: "nfl_best_quality"
-description: "Highest quality model with optimized speed"
+experiment_name: "nfl_optimized_quality"
+description: "Best quality without overfitting - hardware optimized"
 
 # Data Configuration
 data:
@@ -18,73 +20,73 @@ data:
   radius: 20.0
   future_seq_len: 10
 
-# Model Architecture - MAXIMUM QUALITY
+# Model Architecture - BALANCED (proven effective, less overfitting risk)
 model:
   input_dim: 7
-  hidden_dim: 192            # Larger for better representations
-  num_gnn_layers: 8          # Deeper network
-  heads: 8                   # More attention heads
-  dropout: 0.12              # Balanced regularization
+  hidden_dim: 128            # Reduced from 192 - less overfitting
+  num_gnn_layers: 6          # Reduced from 8 - proven effective
+  heads: 8
+  dropout: 0.18              # Increased from 0.12 - stronger regularization
   probabilistic: false
   num_modes: 6
   use_scene_encoder: true
 
-# Training Configuration - QUALITY + SPEED
+# Training - OPTIMIZED FOR RTX 3050
 training:
-  batch_size: 96             # Sweet spot for RTX 3050 (4GB)
-  learning_rate: 0.0008      # Slightly lower for larger model
-  max_epochs: 200            # More epochs for convergence
-  min_epochs: 30
+  batch_size: 128            # Larger batch fits with hidden_dim=128 + FP16
+  learning_rate: 0.001
+  max_epochs: 100            # Reduced from 200 - prevents late overfitting
+  min_epochs: 25
   num_workers: 4
   accumulate_grad_batches: 1
 
-# Optimization
+# Optimization - STRONGER REGULARIZATION
 optimizer:
   type: "adamw"
-  weight_decay: 0.00015      # Slightly more regularization
+  weight_decay: 0.0003       # Doubled - prevents overfitting
   betas: [0.9, 0.999]
   eps: 1.0e-08
 
-# Learning Rate Scheduler - Cosine with Warmup
+# Learning Rate Scheduler
 lr_scheduler:
   type: "cosine_warmup"
   warmup_epochs: 5
   min_lr: 1.0e-07
 
-# Loss Weights - Multi-task Learning
+# Loss Weights
 loss_weights:
   trajectory: 1.0
-  velocity: 0.35             # Smooth trajectories
-  acceleration: 0.15         # Physically plausible
+  velocity: 0.35
+  acceleration: 0.15
   collision: 0.05
   coverage: 0.5
 
-# Regularization - QUALITY FOCUSED
+# Regularization - ANTI-OVERFITTING
 regularization:
   gradient_clip_val: 1.0
-  use_augmentation: true     # Critical for generalization
-  use_huber_loss: true       # Robust to outliers
+  use_augmentation: true     # Data augmentation ON
+  use_huber_loss: true       # Robust loss
   huber_delta: 1.0
-  label_smoothing: 0.03      # Slight smoothing
+  label_smoothing: 0.1       # Increased - prevents overconfidence
 
 # Hardware - MAXIMUM GPU UTILIZATION
 hardware:
-  precision: "16-mixed"      # FP16 for speed + larger batches
+  precision: "16-mixed"      # FP16 for speed + memory
   accelerator: "gpu"
   devices: 1
   strategy: "auto"
 
-# Callbacks - QUALITY CHECKPOINTING
+# Callbacks - EARLIER STOPPING
 callbacks:
   early_stopping:
     enabled: true
-    patience: 20             # More patience for deep model
-    min_delta: 0.0003
+    patience: 15             # Reduced from 20 - catches overfitting earlier
+    min_delta: 0.0005
     monitor: "val_ade"
     mode: "min"
     
   model_checkpoint:
-    save_top_k: 5            # Keep more checkpoints
+    save_top_k: 5
     monitor: "val_ade"
     mode: "min"
     save_last: true
@@ -102,10 +104,10 @@ paths:
   log_dir: "./logs"
   output_dir: "./outputs"
 
-# Reproducibility - BALANCED
+# Reproducibility - SPEED MODE
 reproducibility:
   seed: 42
-  deterministic: false       # Speed boost
+  deterministic: false       # Faster
   benchmark: true            # cuDNN autotuning
 
 # Production
@@ -115,9 +117,9 @@ production:
   export_torchscript: true
   save_config: true
 
-# Target Metrics (Competition-winning targets)
+# Target Metrics
 thresholds:
-  target_val_ade: 0.45       # Aggressive < 0.5 yards
-  target_val_fde: 0.80
-  target_val_miss_rate: 0.08
-  target_val_cov_acc: 0.92
+  target_val_ade: 0.50
+  target_val_fde: 0.90
+  target_val_miss_rate: 0.10
+  target_val_cov_acc: 0.90

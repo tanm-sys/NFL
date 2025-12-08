@@ -69,6 +69,16 @@ from src.models.gnn import NFLGraphTransformer
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', category=FutureWarning)
 
+# ============================================================================
+# HARDWARE OPTIMIZATIONS FOR RTX 3050 (Tensor Cores + cuDNN)
+# ============================================================================
+# Enable Tensor Cores for FP16/FP32 operations - 'high' balances speed + quality
+torch.set_float32_matmul_precision('high')
+
+# Enable cuDNN optimizations
+torch.backends.cudnn.benchmark = True  # Auto-tune for best convolution algorithms
+torch.backends.cudnn.enabled = True    # Ensure cuDNN is enabled
+
 # Rich console for beautiful output
 console = Console()
 

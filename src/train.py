@@ -2,13 +2,67 @@ import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
+from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, StochasticWeightAveraging
 import optuna
 from torch_geometric.loader import DataLoader as PyGDataLoader
 from torch_geometric.data import Batch
 from src.models.gnn import NFLGraphTransformer
 from src.features import create_graph_data, build_edge_index_and_attr
+from src.data_loader import (
+    DataLoader,
+    GraphDataset,
+    build_play_metadata,
+    expand_play_tuples,
+)
 import numpy as np
+import json
+from pathlib import Path
+import matplotlib.pyplot as plt
+
+
+class AttentionVisualizationCallback(pl.Callback):
+    """
+    Periodically logs attention weight histograms to TensorBoard-compatible loggers.
+    """
+
+    def __init__(self, sample_batch, log_every_n_epochs: int = 10, tag: str = "attention/histogram"):
+        super().__init__()
+        self.sample_batch = sample_batch
+        self.log_every_n_epochs = log_every_n_epochs
+        self.tag = tag
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        if (trainer.current_epoch + 1) % self.log_every_n_epochs != 0:
+            return
+
+        if self.sample_batch is None:
+            return
+
+        batch = self.sample_batch.to(pl_module.device)
+        with torch.no_grad():
+            if pl_module.probabilistic:
+                _, _, _, attn = pl_module.model(batch, return_distribution=True, return_attention_weights=True)
+            else:
+                _, _, attn = pl_module.model(batch, return_attention_weights=True)
+
+        if attn is None:
+            return
+
+        edge_index_attn, alpha = attn
+        alpha_cpu = alpha.detach().cpu().numpy()
+
+        fig, ax = plt.subplots(figsize=(4, 3))
+        ax.hist(alpha_cpu, bins=30, color="teal", alpha=0.8)
+        ax.set_title("Attention Weights")
+        ax.set_xlabel("alpha")
+        ax.set_ylabel("count")
+        ax.grid(True, linestyle="--", alpha=0.4)
+
+        logger = trainer.logger
+        experiment = getattr(logger, "experiment", None) if logger is not None else None
+        if experiment is not None and hasattr(experiment, "add_figure"):
+            experiment.add_figure(self.tag, fig, global_step=trainer.global_step)
+        plt.close(fig)
 
 
 def velocity_loss(pred, target, mask=None):
@@ -191,7 +245,7 @@ class NFLGraphPredictor(pl.LightningModule):
     PyTorch Lightning module for NFL trajectory prediction.
     Supports both deterministic and probabilistic (GMM) modes.
     """
-    def __init__(self, input_dim=7, hidden_dim=64, lr=1e-3, future_seq_len=10,
+    def __init__(self, input_dim=9, hidden_dim=64, lr=1e-3, future_seq_len=10,
                  probabilistic=False, num_modes=6, velocity_weight=0.3, 
                  acceleration_weight=0.1, coverage_weight=0.5, collision_weight=0.05,
                  use_augmentation=True, use_huber_loss=False, huber_delta=1.0):
@@ -245,9 +299,10 @@ class NFLGraphPredictor(pl.LightningModule):
                 loss_traj = self.model.decoder.nll_loss(params, mode_probs, y)
             else:
                 loss_traj = torch.tensor(0.0, device=self.device)
-            
-            # Best mode prediction for metrics
-            predictions = params[..., :2].mean(dim=2)  # Average over modes for velocity loss
+            # Probability-weighted expectation for auxiliary losses
+            mu = params[..., :2]  # [N, T, K, 2]
+            probs_expanded = mode_probs.unsqueeze(1).unsqueeze(-1)  # [N, 1, K, 1]
+            predictions = (mu * probs_expanded).sum(dim=2)
         else:
             predictions, cov_pred, _ = self(batch)
             
@@ -282,12 +337,12 @@ class NFLGraphPredictor(pl.LightningModule):
         loss_cov = torch.tensor(0.0, device=self.device)
         if hasattr(batch, 'y_coverage') and batch.y_coverage is not None:
             target_cov = batch.y_coverage.view(-1, 1)
-            valid_mask = (target_cov >= 0).squeeze()  # -1.0 = missing
-            if valid_mask.any():
+            cov_mask = (target_cov >= 0).squeeze()  # -1.0 = missing
+            if cov_mask.any():
                 loss_cov = F.binary_cross_entropy_with_logits(
-                    cov_pred[valid_mask], target_cov[valid_mask]
+                    cov_pred[cov_mask], target_cov[cov_mask]
                 )
-                self.log("train_cov_loss", loss_cov, batch_size=valid_mask.sum())
+                self.log("train_cov_loss", loss_cov, batch_size=cov_mask.sum())
              
         # Total Loss (Weighted) - All P0/P1/P2 losses
         loss = (loss_traj + 
@@ -301,7 +356,7 @@ class NFLGraphPredictor(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         # Forward pass
         if self.probabilistic:
-            predictions = self.model(batch, return_distribution=False)[0]  # Best mode prediction
+            params, mode_probs, cov_pred, _ = self.model(batch, return_distribution=True)
         else:
             predictions, cov_pred, _ = self(batch)
         
@@ -310,6 +365,14 @@ class NFLGraphPredictor(pl.LightningModule):
         if valid_mask is not None:
             valid_mask = valid_mask.bool()
         
+        # Determine base predictions (MAP or deterministic) for primary metrics
+        if self.probabilistic:
+            mu = params[..., :2]  # [N, T, K, 2]
+            best_mode = mode_probs.argmax(dim=-1)  # [N]
+            batch_idx_nodes = torch.arange(mu.shape[0], device=mu.device)
+            predictions = mu[batch_idx_nodes, :, best_mode, :]  # [N, T, 2]
+        # For deterministic path predictions already defined
+
         # Convert predictions to absolute positions for metrics
         if hasattr(batch, 'current_pos'):
             current_pos = batch.current_pos.unsqueeze(1)  # [N, 1, 2]
@@ -345,6 +408,64 @@ class NFLGraphPredictor(pl.LightningModule):
         self.log("val_ade", ade, batch_size=batch.num_graphs)
         self.log("val_fde", fde, batch_size=batch.num_graphs)
         self.log("val_miss_rate_2yd", miss_rate, batch_size=batch.num_graphs)
+
+        # Stratified metrics by role and down
+        if disp.numel() > 0:
+            disp_local = disp  # already aligned to valid_mask
+            # Role-based
+            if hasattr(batch, "role"):
+                roles_all = batch.role
+                roles_filtered = roles_all if valid_mask is None else roles_all[valid_mask]
+                for rid, name in zip([0, 1, 2, 3], ["def_cov", "other_rr", "passer", "targeted"]):
+                    mask_role = roles_filtered == rid
+                    if mask_role.any():
+                        ade_role = disp_local[mask_role].mean()
+                        fde_role = disp_local[mask_role][:, -1].mean()
+                        self.log(f"val_ade_role_{name}", ade_role, batch_size=mask_role.sum())
+                        self.log(f"val_fde_role_{name}", fde_role, batch_size=mask_role.sum())
+            # Down-based
+            if hasattr(batch, "context") and hasattr(batch, "batch"):
+                down_vals = batch.context[:, 0]  # [num_graphs]
+                down_nodes = down_vals[batch.batch].long()
+                down_nodes = down_nodes if valid_mask is None else down_nodes[valid_mask]
+                for down in [1, 2, 3, 4]:
+                    mask_down = down_nodes == down
+                    if mask_down.any():
+                        ade_down = disp_local[mask_down].mean()
+                        fde_down = disp_local[mask_down][:, -1].mean()
+                        self.log(f"val_ade_down_{down}", ade_down, batch_size=mask_down.sum())
+                        self.log(f"val_fde_down_{down}", fde_down, batch_size=mask_down.sum())
+
+        # Probabilistic metrics: NLL and minADE/minFDE across modes
+        if self.probabilistic:
+            if valid_mask is not None and valid_mask.sum() > 0:
+                mask_nodes = valid_mask.bool()
+                nll_loss = self.model.decoder.nll_loss(params[mask_nodes], mode_probs[mask_nodes], y[mask_nodes])
+            else:
+                nll_loss = self.model.decoder.nll_loss(params, mode_probs, y)
+            self.log("val_nll_loss", nll_loss, batch_size=batch.num_graphs)
+
+            # minADE/minFDE across modes
+            if hasattr(batch, 'current_pos'):
+                current_pos_full = batch.current_pos.unsqueeze(1)  # [N,1,2]
+                mu_abs = mu + current_pos_full.unsqueeze(2)  # [N,T,K,2]
+                target_abs_full = y + current_pos_full
+            else:
+                mu_abs = mu
+                target_abs_full = y
+
+            if valid_mask is not None:
+                mu_abs = mu_abs[valid_mask]
+                target_abs_full = target_abs_full[valid_mask]
+
+            if mu_abs.numel() > 0:
+                disp_modes = torch.sqrt(torch.sum((mu_abs - target_abs_full.unsqueeze(2)) ** 2, dim=-1))  # [N,T,K]
+                ade_modes = disp_modes.mean(dim=1)  # [N,K]
+                fde_modes = disp_modes[:, -1, :]  # [N,K]
+                min_ade = ade_modes.min(dim=1).values.mean()
+                min_fde = fde_modes.min(dim=1).values.mean()
+                self.log("val_minADE", min_ade, batch_size=batch.num_graphs)
+                self.log("val_minFDE", min_fde, batch_size=batch.num_graphs)
         
         # Coverage Validation - filter out missing coverage labels (sentinel value -1.0)
         if self.probabilistic:
@@ -352,19 +473,19 @@ class NFLGraphPredictor(pl.LightningModule):
             
         if hasattr(batch, 'y_coverage') and batch.y_coverage is not None:
             target_cov = batch.y_coverage.view(-1, 1)
-            valid_mask = (target_cov >= 0).squeeze()  # -1.0 = missing
+            cov_mask = (target_cov >= 0).squeeze()  # -1.0 = missing
             
-            if valid_mask.any():
+            if cov_mask.any():
                 loss_cov = F.binary_cross_entropy_with_logits(
-                    cov_pred[valid_mask], target_cov[valid_mask]
+                    cov_pred[cov_mask], target_cov[cov_mask]
                 )
-                self.log("val_loss_cov", loss_cov, batch_size=valid_mask.sum())
+                self.log("val_loss_cov", loss_cov, batch_size=cov_mask.sum())
                  
                 # Accuracy
-                probs = torch.sigmoid(cov_pred[valid_mask])
+                probs = torch.sigmoid(cov_pred[cov_mask])
                 preds = (probs > 0.5).float()
-                acc = (preds == target_cov[valid_mask]).float().mean()
-                self.log("val_cov_acc", acc, batch_size=valid_mask.sum())
+                acc = (preds == target_cov[cov_mask]).float().mean()
+                self.log("val_cov_acc", acc, batch_size=cov_mask.sum())
              
         return loss_traj
         
@@ -435,16 +556,83 @@ def tune_model(num_trials=5):
         hidden_dim = trial.suggest_categorical("hidden_dim", [32, 64, 128])
         velocity_weight = trial.suggest_float("velocity_weight", 0.1, 0.5)
         coverage_weight = trial.suggest_float("coverage_weight", 0.3, 0.7)
+        probabilistic = trial.suggest_categorical("probabilistic", [False, True])
+        num_modes = 6 if probabilistic else 1
+
+        # Build small streaming datasets for tuning
+        loader = DataLoader(".")
+        history_len = 5
+        future_seq_len = 10
+        play_meta = build_play_metadata(loader, weeks=[1, 2], history_len=history_len, future_seq_len=future_seq_len)
+        if len(play_meta) == 0:
+            return float("inf")
+
+        play_keys = [(w, g, p) for (w, g, p, n) in play_meta if n > 0]
+        play_keys = sorted(play_keys)
+        rng = np.random.default_rng(123)
+        play_keys_shuffled = play_keys.copy()
+        rng.shuffle(play_keys_shuffled)
+        n_total = len(play_keys_shuffled)
+        n_train = max(1, int(0.8 * n_total))
+        train_keys = set(play_keys_shuffled[:n_train])
+        val_keys = set(play_keys_shuffled[n_train:])
+
+        train_tuples = expand_play_tuples(play_meta, allowed_plays=train_keys)
+        val_tuples = expand_play_tuples(play_meta, allowed_plays=val_keys)
+        if len(train_tuples) == 0 or len(val_tuples) == 0:
+            return float("inf")
+
+        cache_dir = Path("./cache/graphs_optuna")
+        train_ds = GraphDataset(
+            loader,
+            train_tuples,
+            radius=20.0,
+            future_seq_len=future_seq_len,
+            history_len=history_len,
+            cache_dir=cache_dir,
+            persist_cache=True,
+            in_memory_cache_size=3,
+        )
+        val_ds = GraphDataset(
+            loader,
+            val_tuples,
+            radius=20.0,
+            future_seq_len=future_seq_len,
+            history_len=history_len,
+            cache_dir=cache_dir,
+            persist_cache=True,
+            in_memory_cache_size=2,
+        )
+
+        train_loader = PyGDataLoader(train_ds, batch_size=24, shuffle=True, num_workers=2)
+        val_loader = PyGDataLoader(val_ds, batch_size=24, shuffle=False, num_workers=2)
         
         model = NFLGraphPredictor(
             hidden_dim=hidden_dim, 
             lr=lr,
             velocity_weight=velocity_weight,
-            coverage_weight=coverage_weight
+            coverage_weight=coverage_weight,
+            input_dim=9,
+            probabilistic=probabilistic,
+            num_modes=num_modes,
+            use_augmentation=False,
         )
         
-        # Dummy Data for tuning
-        return 0.5  # Dummy validation score
+        trainer = pl.Trainer(
+            max_epochs=5,
+            accelerator="gpu" if torch.cuda.is_available() else "cpu",
+            devices=1,
+            logger=False,
+            enable_checkpointing=False,
+            enable_progress_bar=False,
+            limit_train_batches=0.5,
+            limit_val_batches=1.0,
+        )
+
+        trainer.fit(model, train_loader, val_loader)
+        metrics = trainer.validate(model, val_loader, verbose=False)
+        val_ade = metrics[0].get("val_ade", float("inf")) if metrics else float("inf")
+        return val_ade
         
     study = optuna.create_study(direction="minimize")
     study.optimize(objective, n_trials=num_trials)
@@ -453,7 +641,7 @@ def tune_model(num_trials=5):
     return study.best_params
 
 
-def train_model(sanity=False, weeks=None, probabilistic=False):
+def train_model(sanity=False, weeks=None, probabilistic=False, split_path: str = "./outputs/splits.json"):
     """
     Main training function.
     
@@ -464,80 +652,95 @@ def train_model(sanity=False, weeks=None, probabilistic=False):
     """
     print(f"Starting training run... (Sanity Mode: {sanity}, Probabilistic: {probabilistic})")
     
-    from src.data_loader import DataLoader
-    from src.features import create_graph_data
-    import polars as polars_df
-    
     if weeks is None:
         weeks = list(range(1, 19))  # All 18 weeks by default for best accuracy
     
     loader = DataLoader(".")
-    all_graphs = []
-    
+    history_len = 5
+    future_seq_len = 10
+    split_path = Path(split_path)
+
     try:
-        for week in weeks:
-            try:
-                print(f"Loading week {week}...")
-                df = loader.load_week_data(week) 
-                df = loader.standardize_tracking_directions(df)
-                
-                if sanity and week == weeks[0]:
-                    # Filter to first game for sanity check
-                    game_ids = df["game_id"].unique().head(1).to_list()
-                    df = df.filter(polars_df.col("game_id").is_in(game_ids))
-                    print(f"Sanity: Filtered to {df.shape[0]} rows (1 game).")
-                
-                graphs = create_graph_data(df, radius=20.0, future_seq_len=10)
-                all_graphs.extend(graphs)
-                print(f"Week {week}: Generated {len(graphs)} frames of graph data.")
-                
-            except FileNotFoundError:
-                print(f"Week {week} not found, skipping...")
-                continue
-        
-        if len(all_graphs) == 0:
-            print("No graph data generated. Exiting.")
+        play_meta = build_play_metadata(loader, weeks, history_len, future_seq_len)
+        if len(play_meta) == 0:
+            print("No play metadata found. Exiting.")
             return
-            
-        print(f"Total: {len(all_graphs)} frames of graph data.")
-        
-        if sanity:
-            all_graphs = all_graphs[:500]
-            print(f"Sanity: Truncated to 500 frames.")
-        
-        # Split by play_id to prevent data leakage
-        play_ids = []
-        for g in all_graphs:
-            if hasattr(g, 'game_id') and hasattr(g, 'play_id'):
-                play_ids.append((int(g.game_id), int(g.play_id)))
-            else:
-                play_ids.append(None)
-        
-        unique_plays = list(set([p for p in play_ids if p is not None]))
-        
-        if len(unique_plays) > 0:
-            np.random.seed(42)
-            np.random.shuffle(unique_plays)
-            split_idx = int(0.8 * len(unique_plays))
-            train_plays = set(unique_plays[:split_idx])
-            val_plays = set(unique_plays[split_idx:])
-            
-            train_data = [g for g, pid in zip(all_graphs, play_ids) if pid in train_plays]
-            val_data = [g for g, pid in zip(all_graphs, play_ids) if pid in val_plays]
-            print(f"Split by play_id: {len(train_plays)} train plays, {len(val_plays)} val plays")
-            print(f"Train frames: {len(train_data)}, Val frames: {len(val_data)}")
+
+        # Build deterministic play list and split
+        unique_play_keys = [(w, g, p) for (w, g, p, n) in play_meta if n > 0]
+        unique_play_keys = sorted(unique_play_keys)
+
+        if split_path.exists():
+            with open(split_path, "r") as f:
+                split_data = json.load(f)
+            train_keys = {tuple(x) for x in split_data.get("train", [])}
+            val_keys = {tuple(x) for x in split_data.get("val", [])}
+            test_keys = {tuple(x) for x in split_data.get("test", [])}
+            print(f"Loaded splits from {split_path}")
         else:
-            print("Warning: play_id not found, using simple split")
-            train_len = int(0.8 * len(all_graphs))
-            train_data = all_graphs[:train_len]
-            val_data = all_graphs[train_len:]
-        
-        train_loader = PyGDataLoader(train_data, batch_size=32, shuffle=True, num_workers=4)
-        val_loader = PyGDataLoader(val_data, batch_size=32, num_workers=4)
+            rng = np.random.default_rng(42)
+            play_keys_shuffled = unique_play_keys.copy()
+            rng.shuffle(play_keys_shuffled)
+            n_total = len(play_keys_shuffled)
+            n_train = int(0.8 * n_total)
+            n_val = int(0.1 * n_total)
+            train_keys = set(play_keys_shuffled[:n_train])
+            val_keys = set(play_keys_shuffled[n_train : n_train + n_val])
+            test_keys = set(play_keys_shuffled[n_train + n_val :])
+            split_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(split_path, "w") as f:
+                json.dump(
+                    {
+                        "train": [list(x) for x in train_keys],
+                        "val": [list(x) for x in val_keys],
+                        "test": [list(x) for x in test_keys],
+                    },
+                    f,
+                    indent=2,
+                )
+            print(f"Saved splits to {split_path}")
+
+        if sanity:
+            # limit to small subset of plays for speed
+            train_keys = set(list(train_keys)[:20])
+            val_keys = set(list(val_keys)[:5])
+
+        train_tuples = expand_play_tuples(play_meta, allowed_plays=train_keys)
+        val_tuples = expand_play_tuples(play_meta, allowed_plays=val_keys)
+
+        if len(train_tuples) == 0 or len(val_tuples) == 0:
+            print("No graph data generated for splits. Exiting.")
+            return
+
+        cache_dir = Path("./cache/graphs")
+        train_dataset = GraphDataset(
+            loader,
+            train_tuples,
+            radius=20.0,
+            future_seq_len=future_seq_len,
+            history_len=history_len,
+            cache_dir=cache_dir,
+            persist_cache=True,
+            in_memory_cache_size=4,
+        )
+        val_dataset = GraphDataset(
+            loader,
+            val_tuples,
+            radius=20.0,
+            future_seq_len=future_seq_len,
+            history_len=history_len,
+            cache_dir=cache_dir,
+            persist_cache=True,
+            in_memory_cache_size=2,
+        )
+
+        train_loader = PyGDataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
+        val_loader = PyGDataLoader(val_dataset, batch_size=32, num_workers=4)
+        sample_batch = next(iter(val_loader)) if len(val_dataset) > 0 else None
         
         # Model
         model = NFLGraphPredictor(
-            input_dim=7, 
+            input_dim=9, 
             hidden_dim=64, 
             lr=1e-3,
             probabilistic=probabilistic,
@@ -562,8 +765,15 @@ def train_model(sanity=False, weeks=None, probabilistic=False):
                 mode='min',
                 save_top_k=1,
                 filename='best-{epoch:02d}-{val_ade:.3f}'
-            )
+            ),
+            StochasticWeightAveraging(
+                swa_lrs=1e-5,
+                swa_epoch_start=int(max_epochs * 0.75),
+                annealing_epochs=5,
+            ),
         ]
+        if not sanity and sample_batch is not None:
+            callbacks.append(AttentionVisualizationCallback(sample_batch, log_every_n_epochs=10))
         
         trainer = pl.Trainer(
             max_epochs=max_epochs, 

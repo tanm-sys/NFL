@@ -678,6 +678,22 @@ with torch.no_grad():
     predictions = model(graph)
 ```
 
+### Standalone Inference Script
+
+Use the lightweight runner for CSV inputs and optional visualization:
+
+```bash
+python -m src.inference \
+  --checkpoint path/to/ckpt.ckpt \
+  --input-csv train/input_2023_w01.csv \
+  --output-csv outputs/preds.csv \
+  --visualize
+```
+
+### ONNX Export (Production)
+
+The production trainer now exports TorchScript and ONNX artifacts to `outputs/exported_models/` when `export_onnx` or `export_torchscript` are enabled in the config.
+
 ---
 
 ## Next Steps

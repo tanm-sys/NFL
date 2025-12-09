@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv, GlobalAttention, global_mean_pool
 from torch_geometric.data import Data, Batch
-from torch_geometric.utils import scatter
+from torch_geometric.utils import scatter, to_dense_batch
 
 # Try to import einops for cleaner tensor operations
 try:
@@ -123,24 +123,14 @@ class SceneFlowEncoder(nn.Module):
             
             return self.output_proj(scene)
         
-        # Process each graph in batch
-        num_graphs = batch_idx.max().item() + 1
-        scene_embs = []
-        
-        for b in range(num_graphs):
-            mask = batch_idx == b
-            nodes = node_embs[mask].unsqueeze(0)  # [1, n, H]
-            queries = self.inducing_points.unsqueeze(0)  # [1, K, H]
-            
-            # Cross attention
-            attended, _ = self.cross_attention(queries, nodes, nodes)  # [1, K, H]
-            
-            # Weighted pooling
-            weights = F.softmax(self.pool_attention(attended), dim=1)
-            scene = (weights * attended).sum(dim=1)  # [1, H]
-            scene_embs.append(scene)
-        
-        return self.output_proj(torch.cat(scene_embs, dim=0))  # [B, H]
+        nodes_dense, mask = to_dense_batch(node_embs, batch_idx)  # [B, N_max, H], [B, N_max]
+        queries = self.inducing_points.unsqueeze(0).expand(nodes_dense.size(0), -1, -1)  # [B, K, H]
+
+        attended, _ = self.cross_attention(queries, nodes_dense, nodes_dense, key_padding_mask=~mask)
+        weights = F.softmax(self.pool_attention(attended), dim=1)  # [B, K, 1]
+        scene = (weights * attended).sum(dim=1)  # [B, H]
+
+        return self.output_proj(scene)
 
 
 class GoalConditionedDecoder(nn.Module):
@@ -316,7 +306,7 @@ class GraphPlayerEncoder(nn.Module):
     Enhanced with GATv2 layers, residual connections, DropPath, and dropout.
     SOTA architecture used in competition-winning models.
     """
-    def __init__(self, input_dim=7, hidden_dim=64, heads=4, context_dim=3, edge_dim=5, 
+    def __init__(self, input_dim=9, hidden_dim=64, heads=4, context_dim=3, edge_dim=5, 
                  num_layers=4, dropout=0.1, droppath_rate=0.1):
         super().__init__()
         self.num_layers = num_layers
@@ -505,7 +495,7 @@ class TrajectoryDecoder(nn.Module):
         
         self.output_head = nn.Linear(hidden_dim, 2) # dx, dy output
         
-    def forward(self, context_emb):
+    def forward(self, context_emb, padding_mask=None):
         num_nodes, hidden = context_emb.shape
         x = context_emb.unsqueeze(1).repeat(1, self.future_seq_len, 1) # [Nodes, Seq, Hidden]
         
@@ -514,10 +504,15 @@ class TrajectoryDecoder(nn.Module):
         x = x + queries
         
         # Transformer
-        out = self.transformer(x)
+        pad_mask = None
+        if padding_mask is not None:
+            pad_mask = (~padding_mask).unsqueeze(1).expand(-1, self.future_seq_len) if padding_mask.dim() == 1 else ~padding_mask
+        out = self.transformer(x, src_key_padding_mask=pad_mask)
         
         # Head
         pred = self.output_head(out) # [Nodes, Seq, 2]
+        if pad_mask is not None:
+            pred = pred.masked_fill(pad_mask.unsqueeze(-1), 0.0)
         return pred
 
 
@@ -563,7 +558,7 @@ class ProbabilisticTrajectoryDecoder(nn.Module):
         # Mode probabilities (per node, across all modes)
         self.mode_prob_head = nn.Linear(hidden_dim, num_modes)
         
-    def forward(self, context_emb, return_best_mode=False):
+    def forward(self, context_emb, return_best_mode=False, padding_mask=None):
         """
         Args:
             context_emb: [N, H] node embeddings from GNN
@@ -584,6 +579,10 @@ class ProbabilisticTrajectoryDecoder(nn.Module):
         
         all_mode_params = []
         
+        pad_mask = None
+        if padding_mask is not None:
+            pad_mask = (~padding_mask).unsqueeze(1).expand(-1, self.future_seq_len) if padding_mask.dim() == 1 else ~padding_mask
+
         for m in range(self.num_modes):
             # Add mode embedding to context
             mode_context = context_emb + self.mode_emb.weight[m].unsqueeze(0)  # [N, H]
@@ -595,7 +594,7 @@ class ProbabilisticTrajectoryDecoder(nn.Module):
             x = x + self.query_pos_emb.repeat(num_nodes, 1, 1)
             
             # Transformer
-            out = self.transformer(x)  # [N, T, H]
+            out = self.transformer(x, src_key_padding_mask=pad_mask)  # [N, T, H]
             
             # GMM parameters
             raw_params = self.gmm_head(out)  # [N, T, 5]
@@ -614,6 +613,8 @@ class ProbabilisticTrajectoryDecoder(nn.Module):
         
         # Stack all modes: [N, T, K, 5]
         params = torch.stack(all_mode_params, dim=2)
+        if pad_mask is not None:
+            params = params.masked_fill(pad_mask.unsqueeze(-1).unsqueeze(-1), 0.0)
         
         if return_best_mode:
             # Return trajectory from most likely mode
@@ -680,7 +681,7 @@ class NFLGraphTransformer(nn.Module):
     Main model combining GNN encoder with trajectory decoder and coverage classifier.
     P3: Now includes SceneFlowEncoder for global play understanding.
     """
-    def __init__(self, input_dim=7, hidden_dim=64, heads=4, future_seq_len=10, 
+    def __init__(self, input_dim=9, hidden_dim=64, heads=4, future_seq_len=10, 
                  edge_dim=5, num_gnn_layers=4, probabilistic=False, num_modes=6,
                  use_scene_encoder=True):
         super().__init__()
@@ -721,6 +722,7 @@ class NFLGraphTransformer(nn.Module):
         # PyG Batch Data object
         x, edge_index, edge_attr = data.x, data.edge_index, data.edge_attr
         batch = data.batch if hasattr(data, 'batch') else None
+        padding_mask = data.valid_mask if hasattr(data, "valid_mask") else None
         
         # Context extraction (handle missing safely)
         context = data.context if hasattr(data, 'context') else None
@@ -755,12 +757,12 @@ class NFLGraphTransformer(nn.Module):
         # Decode Temporal (Trajectory Prediction)
         if self.probabilistic:
             if return_distribution:
-                predictions, mode_probs = self.decoder(node_embs)
+                predictions, mode_probs = self.decoder(node_embs, padding_mask=padding_mask)
             else:
-                predictions = self.decoder(node_embs, return_best_mode=True)
+                predictions = self.decoder(node_embs, return_best_mode=True, padding_mask=padding_mask)
                 mode_probs = None
         else:
-            predictions = self.decoder(node_embs)
+            predictions = self.decoder(node_embs, padding_mask=padding_mask)
             mode_probs = None
         
         # Multi-Task: Coverage Classification

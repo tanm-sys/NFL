@@ -15,7 +15,7 @@ data:
   future_seq_len: 10
 
 model:
-  input_dim: 7
+  input_dim: 9
   hidden_dim: 32  # Smaller for faster training
   num_gnn_layers: 2
   heads: 4

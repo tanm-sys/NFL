@@ -2,7 +2,10 @@ import polars as pl
 import pandas as pd
 import os
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple, Dict
+import torch
+from torch.utils.data import Dataset
+from collections import OrderedDict
 
 class DataLoader:
     def __init__(self, data_dir: str = "."):
@@ -98,6 +101,190 @@ class DataLoader:
         df = tracking_df.join(play_context, on=["game_id", "play_id"], how="inner")
             
         return df
+
+
+class GraphDataset(Dataset):
+    """
+    Map-style dataset that constructs graphs lazily per play and optionally caches per-play tensors.
+    Each dataset index corresponds to a single graph frame (time slice) within a play.
+    """
+
+    def __init__(
+        self,
+        loader: DataLoader,
+        play_tuples: List[Tuple[int, int, int, int]],
+        radius: float = 20.0,
+        future_seq_len: int = 10,
+        history_len: int = 5,
+        cache_dir: Optional[Union[str, Path]] = None,
+        persist_cache: bool = False,
+        in_memory_cache_size: int = 8,
+    ):
+        """
+        Args:
+            loader: DataLoader for loading weeks and standardization.
+            play_tuples: List of (week, game_id, play_id, local_idx) entries. local_idx selects the graph within that play.
+            radius: Graph radius.
+            future_seq_len: Target horizon.
+            history_len: History length.
+            cache_dir: Optional directory for per-play disk cache.
+            persist_cache: If True, saves per-play graphs to disk after first build.
+            in_memory_cache_size: Max number of plays to keep in memory cache (LRU).
+        """
+        super().__init__()
+        self.loader = loader
+        self.play_tuples = play_tuples
+        self.radius = radius
+        self.future_seq_len = future_seq_len
+        self.history_len = history_len
+        self.cache_dir = Path(cache_dir) if cache_dir else None
+        self.persist_cache = persist_cache and self.cache_dir is not None
+        if self.persist_cache and self.cache_dir is not None:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._mem_cache: OrderedDict[str, List[torch.Tensor]] = OrderedDict()
+        self._mem_cache_size = max(1, in_memory_cache_size)
+
+    def __len__(self):
+        return len(self.play_tuples)
+
+    def _cache_key(self, week: int, game_id: int, play_id: int) -> str:
+        return f"w{week:02d}_g{game_id}_p{play_id}"
+
+    def _get_from_mem_cache(self, key: str) -> Optional[List]:
+        if key in self._mem_cache:
+            value = self._mem_cache.pop(key)
+            self._mem_cache[key] = value
+            return value
+        return None
+
+    def _set_mem_cache(self, key: str, value: List):
+        if key in self._mem_cache:
+            self._mem_cache.pop(key)
+        elif len(self._mem_cache) >= self._mem_cache_size:
+            self._mem_cache.popitem(last=False)
+        self._mem_cache[key] = value
+
+    def _load_play_graphs(self, week: int, game_id: int, play_id: int):
+        key = self._cache_key(week, game_id, play_id)
+        mem = self._get_from_mem_cache(key)
+        if mem is not None:
+            return mem
+
+        disk_path = None
+        if self.cache_dir is not None:
+            disk_path = self.cache_dir / f"{key}.pt"
+            if disk_path.exists():
+                graphs = torch.load(disk_path)
+                self._set_mem_cache(key, graphs)
+                return graphs
+
+        week_df = self.loader.load_week_data(week)
+        week_df = self.loader.standardize_tracking_directions(week_df)
+        play_df = week_df.filter(
+            (pl.col("game_id") == game_id) & (pl.col("play_id") == play_id)
+        )
+
+        from src.features import create_graph_data
+
+        graphs = create_graph_data(
+            play_df,
+            radius=self.radius,
+            future_seq_len=self.future_seq_len,
+            history_len=self.history_len,
+        )
+
+        if self.persist_cache and disk_path is not None:
+            torch.save(graphs, disk_path)
+
+        self._set_mem_cache(key, graphs)
+        return graphs
+
+    def __getitem__(self, idx: int):
+        week, game_id, play_id, local_idx = self.play_tuples[idx]
+        graphs = self._load_play_graphs(week, game_id, play_id)
+        if local_idx >= len(graphs):
+            raise IndexError(f"Requested local idx {local_idx} exceeds graphs {len(graphs)} for play {play_id}")
+        return graphs[local_idx]
+
+
+def build_play_tuples(
+    loader: DataLoader,
+    weeks: List[int],
+    history_len: int,
+    future_seq_len: int,
+) -> List[Tuple[int, int, int, int]]:
+    """
+    Build deterministic list of (week, game_id, play_id, local_idx) entries.
+    local_idx indexes the graph within that play (frame-level).
+    """
+    tuples: List[Tuple[int, int, int, int]] = []
+    for week in sorted(weeks):
+        try:
+            df = loader.load_week_data(week)
+            df = loader.standardize_tracking_directions(df)
+        except FileNotFoundError:
+            continue
+
+        counts = (
+            df.group_by(["game_id", "play_id"])
+            .agg(pl.col("frame_id").n_unique().alias("n_frames"))
+            .sort(["game_id", "play_id"])
+        )
+
+        for game_id, play_id, n_frames in counts.iter_rows():
+            num_graphs = max(0, n_frames - history_len - future_seq_len)
+            for local_idx in range(num_graphs):
+                tuples.append((week, int(game_id), int(play_id), int(local_idx)))
+
+    tuples = sorted(tuples, key=lambda x: (x[0], x[1], x[2], x[3]))
+    return tuples
+
+
+def build_play_metadata(
+    loader: DataLoader,
+    weeks: List[int],
+    history_len: int,
+    future_seq_len: int,
+) -> List[Tuple[int, int, int, int]]:
+    """
+    Returns list of (week, game_id, play_id, num_graphs) for deterministic splitting.
+    """
+    meta: List[Tuple[int, int, int, int]] = []
+    for week in sorted(weeks):
+        try:
+            df = loader.load_week_data(week)
+            df = loader.standardize_tracking_directions(df)
+        except FileNotFoundError:
+            continue
+
+        counts = (
+            df.group_by(["game_id", "play_id"])
+            .agg(pl.col("frame_id").n_unique().alias("n_frames"))
+            .sort(["game_id", "play_id"])
+        )
+
+        for game_id, play_id, n_frames in counts.iter_rows():
+            num_graphs = max(0, n_frames - history_len - future_seq_len)
+            meta.append((week, int(game_id), int(play_id), int(num_graphs)))
+
+    meta = sorted(meta, key=lambda x: (x[0], x[1], x[2]))
+    return meta
+
+
+def expand_play_tuples(
+    play_meta: List[Tuple[int, int, int, int]],
+    allowed_plays: Optional[set] = None,
+) -> List[Tuple[int, int, int, int]]:
+    """
+    Expand play metadata to frame-level tuples, optionally filtering by allowed play ids (week, game_id, play_id).
+    """
+    tuples: List[Tuple[int, int, int, int]] = []
+    for week, game_id, play_id, num_graphs in play_meta:
+        if allowed_plays is not None and (week, game_id, play_id) not in allowed_plays:
+            continue
+        for local_idx in range(num_graphs):
+            tuples.append((week, game_id, play_id, local_idx))
+    return tuples
 
     def load_plays(self) -> pl.DataFrame:
         """

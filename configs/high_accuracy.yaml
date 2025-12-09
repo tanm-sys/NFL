@@ -20,7 +20,7 @@ data:
 
 # Model Architecture - WORLD-CLASS (maximized for 6GB VRAM)
 model:
-  input_dim: 7
+  input_dim: 9
   hidden_dim: 256            # Maximum expressiveness
   num_gnn_layers: 8          # Deep network for complex patterns
   heads: 8                   # Optimal attention heads

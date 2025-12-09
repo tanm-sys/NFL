@@ -49,6 +49,7 @@ from pytorch_lightning.callbacks import (
 )
 from pytorch_lightning.strategies import DDPStrategy
 from torch_geometric.loader import DataLoader as PyGDataLoader
+from torch_geometric.data import Batch
 import numpy as np
 import polars as pl_df
 from rich.console import Console
@@ -61,9 +62,13 @@ import optuna
 from optuna.integration import PyTorchLightningPruningCallback
 
 # Project imports
-from src.data_loader import DataLoader
-from src.features import create_graph_data
-from src.train import NFLGraphPredictor
+from src.data_loader import (
+    DataLoader,
+    GraphDataset,
+    build_play_metadata,
+    expand_play_tuples,
+)
+from src.train import NFLGraphPredictor, AttentionVisualizationCallback
 from src.models.gnn import NFLGraphTransformer
 
 # Suppress warnings
@@ -110,7 +115,7 @@ class ProductionConfig:
         self.test_split = kwargs.get('test_split', 0.1)
         
         # Model Architecture
-        self.input_dim = kwargs.get('input_dim', 7)
+        self.input_dim = kwargs.get('input_dim', 9)
         self.hidden_dim = kwargs.get('hidden_dim', 64)
         self.num_gnn_layers = kwargs.get('num_gnn_layers', 4)
         self.heads = kwargs.get('heads', 4)
@@ -459,42 +464,46 @@ class ProductionTrainer:
         
         return loggers
     
-    def load_and_validate_data(self) -> Tuple[List, List, List]:
-        """Load and validate all training data."""
+    def load_and_validate_data(self):
+        """Load metadata and prepare streaming datasets with deterministic splits."""
         console.print("\n[bold cyan]Loading and Validating Data...[/bold cyan]")
         
         loader = DataLoader(self.config.data_dir)
-        all_graphs = []
         data_stats = []
-        
+        play_meta = []
+
         for week in self.config.weeks:
             try:
                 logger.info(f"Loading week {week}...")
                 df = loader.load_week_data(week)
                 df = loader.standardize_tracking_directions(df)
-                
-                # Validate data quality
+
                 if self.config.validate_data:
                     is_valid, issues = DataValidator.validate_dataframe(df, week)
                     if not is_valid:
                         logger.warning(f"Week {week} validation issues: {issues}")
                         console.print(f"[yellow]⚠️  Week {week} has validation issues[/yellow]")
-                
-                # Create graphs
-                graphs = create_graph_data(df, radius=20.0, future_seq_len=self.config.future_seq_len)
-                all_graphs.extend(graphs)
-                
-                # Track statistics
+
+                counts = (
+                    df.group_by(["game_id", "play_id"])
+                    .agg(pl_df.col("frame_id").n_unique().alias("n_frames"))
+                    .sort(["game_id", "play_id"])
+                )
+
+                for game_id, play_id, n_frames in counts.iter_rows():
+                    num_graphs = max(0, n_frames - 5 - self.config.future_seq_len)
+                    play_meta.append((week, int(game_id), int(play_id), int(num_graphs)))
+
                 data_stats.append({
                     'week': week,
                     'rows': df.shape[0],
-                    'graphs': len(graphs),
+                    'graphs': int(counts["n_frames"].sum()),
                     'games': df['game_id'].n_unique(),
                     'plays': df['play_id'].n_unique()
                 })
-                
-                logger.info(f"Week {week}: {len(graphs)} graph frames from {df.shape[0]} rows")
-                
+
+                logger.info(f"Week {week}: {counts['n_frames'].sum()} frames from {df.shape[0]} rows")
+
             except FileNotFoundError:
                 logger.warning(f"Week {week} data not found, skipping...")
                 console.print(f"[yellow]⚠️  Week {week} not found[/yellow]")
@@ -503,16 +512,12 @@ class ProductionTrainer:
                 logger.error(f"Error loading week {week}: {e}")
                 console.print(f"[red]❌ Error loading week {week}: {e}[/red]")
                 continue
-        
-        # Display data summary
-        self._display_data_summary(data_stats, len(all_graphs))
-        
-        # Split data by play_id (prevent leakage)
-        train_data, val_data, test_data = self._split_data(all_graphs)
-        
-        logger.info(f"Data split: Train={len(train_data)}, Val={len(val_data)}, Test={len(test_data)}")
-        
-        return train_data, val_data, test_data
+
+        self._display_data_summary(data_stats, sum([m[3] for m in play_meta]))
+
+        train_ds, val_ds, test_ds = self._split_data(loader, play_meta)
+        logger.info(f"Data split: Train={len(train_ds)}, Val={len(val_ds)}, Test={len(test_ds)}")
+        return train_ds, val_ds, test_ds
     
     def _display_data_summary(self, stats: List[Dict], total_graphs: int):
         """Display beautiful data summary table."""
@@ -543,37 +548,79 @@ class ProductionTrainer:
         
         console.print(table)
     
-    def _split_data(self, all_graphs: List) -> Tuple[List, List, List]:
-        """Split data by play_id to prevent leakage."""
-        # Extract play IDs
-        play_ids = []
-        for g in all_graphs:
-            if hasattr(g, 'game_id') and hasattr(g, 'play_id'):
-                play_ids.append((int(g.game_id), int(g.play_id)))
-            else:
-                play_ids.append(None)
-        
-        # Get unique plays
-        unique_plays = list(set([p for p in play_ids if p is not None]))
-        np.random.seed(self.config.seed)
-        np.random.shuffle(unique_plays)
-        
-        # Calculate split indices
-        n_plays = len(unique_plays)
-        train_idx = int(self.config.train_split * n_plays)
-        val_idx = int((self.config.train_split + self.config.val_split) * n_plays)
-        
-        # Split plays
-        train_plays = set(unique_plays[:train_idx])
-        val_plays = set(unique_plays[train_idx:val_idx])
-        test_plays = set(unique_plays[val_idx:])
-        
-        # Assign graphs to splits
-        train_data = [g for g, pid in zip(all_graphs, play_ids) if pid in train_plays]
-        val_data = [g for g, pid in zip(all_graphs, play_ids) if pid in val_plays]
-        test_data = [g for g, pid in zip(all_graphs, play_ids) if pid in test_plays]
-        
-        return train_data, val_data, test_data
+    def _split_data(self, loader: DataLoader, play_meta: List[Tuple[int, int, int, int]]):
+        """Deterministic split by play_id with streaming datasets."""
+        unique_plays = [(w, g, p) for (w, g, p, n) in play_meta if n > 0]
+        unique_plays = sorted(unique_plays)
+
+        split_file = Path(self.config.output_dir) / "splits_production.json"
+        if split_file.exists():
+            with open(split_file, "r") as f:
+                split_data = json.load(f)
+            train_keys = {tuple(x) for x in split_data.get("train", [])}
+            val_keys = {tuple(x) for x in split_data.get("val", [])}
+            test_keys = {tuple(x) for x in split_data.get("test", [])}
+            logger.info(f"Loaded splits from {split_file}")
+        else:
+            rng = np.random.default_rng(self.config.seed)
+            play_keys_shuffled = unique_plays.copy()
+            rng.shuffle(play_keys_shuffled)
+            n_total = len(play_keys_shuffled)
+            train_idx = int(self.config.train_split * n_total)
+            val_idx = int((self.config.train_split + self.config.val_split) * n_total)
+            train_keys = set(play_keys_shuffled[:train_idx])
+            val_keys = set(play_keys_shuffled[train_idx:val_idx])
+            test_keys = set(play_keys_shuffled[val_idx:])
+            split_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(split_file, "w") as f:
+                json.dump(
+                    {
+                        "train": [list(x) for x in train_keys],
+                        "val": [list(x) for x in val_keys],
+                        "test": [list(x) for x in test_keys],
+                    },
+                    f,
+                    indent=2,
+                )
+            logger.info(f"Saved splits to {split_file}")
+
+        train_tuples = expand_play_tuples(play_meta, allowed_plays=train_keys)
+        val_tuples = expand_play_tuples(play_meta, allowed_plays=val_keys)
+        test_tuples = expand_play_tuples(play_meta, allowed_plays=test_keys)
+
+        cache_dir = Path("./cache/graphs")
+        train_ds = GraphDataset(
+            loader,
+            train_tuples,
+            radius=20.0,
+            future_seq_len=self.config.future_seq_len,
+            history_len=5,
+            cache_dir=cache_dir,
+            persist_cache=True,
+            in_memory_cache_size=6,
+        )
+        val_ds = GraphDataset(
+            loader,
+            val_tuples,
+            radius=20.0,
+            future_seq_len=self.config.future_seq_len,
+            history_len=5,
+            cache_dir=cache_dir,
+            persist_cache=True,
+            in_memory_cache_size=3,
+        )
+        test_ds = GraphDataset(
+            loader,
+            test_tuples,
+            radius=20.0,
+            future_seq_len=self.config.future_seq_len,
+            history_len=5,
+            cache_dir=cache_dir,
+            persist_cache=True,
+            in_memory_cache_size=2,
+        )
+
+        return train_ds, val_ds, test_ds
     
     def create_dataloaders(self, train_data: List, val_data: List, test_data: List) -> Tuple:
         """Create production dataloaders with optimizations."""
@@ -640,7 +687,7 @@ class ProductionTrainer:
         
         return model
     
-    def create_callbacks(self) -> List:
+    def create_callbacks(self, sample_batch=None) -> List:
         """Create production callbacks."""
         callbacks = [
             # Model checkpointing
@@ -686,6 +733,9 @@ class ProductionTrainer:
         )
         callbacks.append(swa_callback)
         console.print("[green]✓ SWA (Stochastic Weight Averaging) enabled[/green]")
+        
+        if sample_batch is not None:
+            callbacks.append(AttentionVisualizationCallback(sample_batch, log_every_n_epochs=10))
         
         # Note: DeviceStatsMonitor removed - replaced by EpochSummaryCallback for cleaner output
         
@@ -746,8 +796,15 @@ class ProductionTrainer:
         # Create model
         model = self.create_model()
         
+        # Sample batch for attention visualization
+        sample_batch = None
+        try:
+            sample_batch = next(iter(val_loader))
+        except Exception:
+            sample_batch = None
+        
         # Create callbacks
-        callbacks = self.create_callbacks()
+        callbacks = self.create_callbacks(sample_batch=sample_batch)
         
         # Create trainer
         trainer = self.create_trainer(callbacks)
@@ -842,6 +899,59 @@ class ProductionTrainer:
                 console.print(f"[yellow]⚠️  TorchScript export failed[/yellow]")
         
         logger.info("Model export complete")
+        
+        # Export to ONNX
+        if self.config.export_onnx:
+            try:
+                onnx_path = export_dir / f"{self.config.experiment_name}.onnx"
+
+                class OnnxWrapper(torch.nn.Module):
+                    def __init__(self, inner, probabilistic=False):
+                        super().__init__()
+                        self.inner = inner
+                        self.probabilistic = probabilistic
+
+                    def forward(self, x, edge_index, edge_attr, batch_idx, valid_mask):
+                        data = Batch(batch=batch_idx, x=x, edge_index=edge_index, edge_attr=edge_attr)
+                        data.valid_mask = valid_mask
+                        out = self.inner(data, return_attention_weights=False, return_distribution=self.probabilistic)
+                        if self.probabilistic:
+                            preds = out[0]
+                        else:
+                            preds = out[0]
+                        return preds
+
+                wrapper = OnnxWrapper(model.model, probabilistic=model.probabilistic)
+                in_features = model.model.encoder.embedding.in_features
+                dummy_x = torch.zeros((8, in_features), dtype=torch.float)
+                dummy_edge_index = torch.tensor([[0, 1], [1, 0]], dtype=torch.long)
+                dummy_edge_attr = torch.zeros((2, 5), dtype=torch.float)
+                dummy_batch = torch.zeros(8, dtype=torch.long)
+                dummy_mask = torch.ones(8, dtype=torch.bool)
+
+                dynamic_axes = {
+                    "x": {0: "num_nodes"},
+                    "edge_index": {1: "num_edges"},
+                    "edge_attr": {0: "num_edges"},
+                    "batch_idx": {0: "num_nodes"},
+                    "valid_mask": {0: "num_nodes"},
+                    "output": {0: "num_nodes"}
+                }
+
+                torch.onnx.export(
+                    wrapper,
+                    (dummy_x, dummy_edge_index, dummy_edge_attr, dummy_batch, dummy_mask),
+                    onnx_path,
+                    input_names=["x", "edge_index", "edge_attr", "batch_idx", "valid_mask"],
+                    output_names=["output"],
+                    dynamic_axes=dynamic_axes,
+                    opset_version=12,
+                )
+                logger.info(f"ONNX model saved to {onnx_path}")
+                console.print(f"[green]✓[/green] ONNX: {onnx_path}")
+            except Exception as e:
+                logger.warning(f"ONNX export failed: {e}")
+                console.print(f"[yellow]⚠️  ONNX export failed[/yellow]")
 
 
 def main():

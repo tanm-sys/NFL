@@ -20,7 +20,7 @@ data:
 
 # Model Architecture (SOTA)
 model:
-  input_dim: 7
+  input_dim: 9
   hidden_dim: 128
   num_gnn_layers: 6
   heads: 8

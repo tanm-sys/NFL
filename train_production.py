@@ -131,6 +131,9 @@ class ProductionConfig:
         self.min_epochs = kwargs.get('min_epochs', 10)
         self.num_workers = kwargs.get('num_workers', 4)
         self.accumulate_grad_batches = kwargs.get('accumulate_grad_batches', 1)
+        self.limit_train_batches = kwargs.get('limit_train_batches', 1.0)
+        self.limit_val_batches = kwargs.get('limit_val_batches', 1.0)
+        self.limit_test_batches = kwargs.get('limit_test_batches', 1.0)
         
         # Optimization
         self.optimizer = kwargs.get('optimizer', 'adamw')
@@ -182,6 +185,8 @@ class ProductionConfig:
         self.export_onnx = kwargs.get('export_onnx', True)
         self.export_torchscript = kwargs.get('export_torchscript', True)
         self.validate_data = kwargs.get('validate_data', True)
+        # Skip expensive sample-batch warmup unless explicitly enabled.
+        self.enable_sample_batch_warmup = kwargs.get('enable_sample_batch_warmup', False)
         
     def validate(self):
         """Validate configuration parameters."""
@@ -770,6 +775,9 @@ class ProductionTrainer:
             profiler='simple' if self.config.enable_profiling else None,
             detect_anomaly=False,  # Disable for production
             enable_checkpointing=True,
+            limit_train_batches=self.config.limit_train_batches,
+            limit_val_batches=self.config.limit_val_batches,
+            limit_test_batches=self.config.limit_test_batches,
         )
         
         return trainer
@@ -796,12 +804,17 @@ class ProductionTrainer:
         # Create model
         model = self.create_model()
         
-        # Sample batch for attention visualization
+        # Sample batch for attention visualization (optional warmup)
         sample_batch = None
-        try:
-            sample_batch = next(iter(val_loader))
-        except Exception:
-            sample_batch = None
+        if self.config.enable_sample_batch_warmup:
+            try:
+                sample_batch = next(iter(val_loader))
+                logger.info("Sample batch warmup enabled for callbacks")
+            except Exception as exc:
+                logger.warning(f"Sample batch warmup failed; continuing without it: {exc}")
+                sample_batch = None
+        else:
+            logger.info("Skipping sample batch warmup (enable_sample_batch_warmup=False)")
         
         # Create callbacks
         callbacks = self.create_callbacks(sample_batch=sample_batch)
@@ -988,6 +1001,14 @@ def main():
     parser.add_argument('--precision', type=str, default='16-mixed',
                        choices=['32', '16-mixed', 'bf16-mixed'],
                        help='Training precision')
+    parser.add_argument('--num-workers', type=int, default=None,
+                       help='Dataloader worker count (overrides config)')
+    parser.add_argument('--limit-train-batches', type=float, default=None,
+                       help='Limit training batches (float fraction or int count)')
+    parser.add_argument('--limit-val-batches', type=float, default=None,
+                       help='Limit validation batches (float fraction or int count)')
+    parser.add_argument('--limit-test-batches', type=float, default=None,
+                       help='Limit test batches (float fraction or int count)')
     
     # Resume
     parser.add_argument('--resume-from', type=str, default=None,
@@ -1006,6 +1027,8 @@ def main():
                        help='Disable data validation')
     parser.add_argument('--profile', action='store_true',
                        help='Enable profiling')
+    parser.add_argument('--enable-sample-batch-warmup', action='store_true',
+                       help='Warm up callbacks using a validation sample batch')
     
     args = parser.parse_args()
     
@@ -1043,12 +1066,22 @@ def main():
         config_dict['max_epochs'] = args.max_epochs
     if args.precision != '16-mixed':
         config_dict['precision'] = args.precision
+    if args.num_workers is not None:
+        config_dict['num_workers'] = args.num_workers
+    if args.limit_train_batches is not None:
+        config_dict['limit_train_batches'] = args.limit_train_batches
+    if args.limit_val_batches is not None:
+        config_dict['limit_val_batches'] = args.limit_val_batches
+    if args.limit_test_batches is not None:
+        config_dict['limit_test_batches'] = args.limit_test_batches
     if args.experiment_name:
         config_dict['experiment_name'] = args.experiment_name
     if args.no_validation:
         config_dict['validate_data'] = False
     if args.profile:
         config_dict['enable_profiling'] = True
+    if args.enable_sample_batch_warmup:
+        config_dict['enable_sample_batch_warmup'] = True
     
     # Set defaults for required fields if not in config
     if 'weeks' not in config_dict:

@@ -27,28 +27,67 @@ Epoch 0: train_loss=2.45, val_loss=2.31, val_ade=1.85
 ✓ Sanity check passed!
 ```
 
+### Production Run (full dataset, reproducible)
+
+```bash
+python train_production.py --config configs/production.yaml
+```
+
+- Saves config snapshot to `outputs/nfl_production_v2_config.json`
+- Reuses deterministic play splits from `outputs/splits_production.json` (created on first run)
+- Exports TorchScript/ONNX artifacts to `outputs/exported_models/` when enabled
+- Uses graph caching in `cache/graphs` to speed up subsequent epochs
 ---
 
 ## Training
 
-### Basic Training
+### Production Training (default path)
 
-Train on the full dataset:
+Full-data training with the production configuration:
+
+```bash
+python train_production.py --config configs/production.yaml
+```
+
+- Probabilistic 8-mode decoder enabled by default
+- bf16 mixed precision + SWA + cosine warmup
+- AdamW (wd=0.05) with gradient accumulation (effective batch 128)
+- Deterministic splits stored at `outputs/splits_production.json`
+- Config snapshot and exported models saved under `outputs/`
+
+**Common overrides (CLI > YAML):**
+
+```bash
+python train_production.py \
+  --config configs/production.yaml \
+  --batch-size 32 \
+  --limit-train-batches 0.25 \
+  --limit-val-batches 0.5 \
+  --enable-sample-batch-warmup \
+  --resume-from checkpoints/last.ckpt
+```
+
+- `--enable-sample-batch-warmup` warms callbacks with a validation batch (default off)
+- `--limit-*` is great for smoke testing on a subset
+- `--probabilistic` flag forces GMM decoding when overriding YAML
+- `--data-dir` allows external data locations
+
+### Research Training (lightweight)
+
+For quick experiments or custom research runs:
 
 ```bash
 python -m src.train --mode train
 ```
 
-**Training process:**
+**Training process (src.train):**
 1. Loads Week 1 tracking data (~150-200 plays)
 2. Constructs graph objects with radius=20.0
 3. Trains for default epochs (configurable)
 4. Saves checkpoints to `lightning_logs/`
 5. Logs metrics (loss, ADE, FDE, coverage accuracy)
 
-### Training with Custom Parameters
-
-Use CLI flags for common configurations:
+**Common flags (src.train):**
 
 ```bash
 # Probabilistic mode (GMM decoder)
@@ -61,13 +100,13 @@ python -m src.train --mode train --weeks 1 2 3 4 5
 python -m src.train --mode train --probabilistic --weeks 1 2 3
 ```
 
-Modify `src/train.py` to adjust hyperparameters:
+**Adjust hyperparameters (src.train):**
 
 ```python
 # In train_model() function
 model = NFLGraphPredictor(
-    input_dim=7,
-    hidden_dim=64,          # Change to 128 for more capacity
+    input_dim=9,
+    hidden_dim=64,          # Increase to 128 for more capacity
     lr=1e-3,                # Learning rate
     future_seq_len=10,
     probabilistic=True,     # Enable GMM decoder
@@ -110,6 +149,8 @@ Use Optuna to find optimal hyperparameters:
 ```bash
 python -m src.train --mode tune
 ```
+
+> `train_production.py --mode tune` currently prints a placeholder; use `src.train` for tuning or edit `configs/production.yaml` directly.
 
 **Tuning process:**
 1. Runs 5 trials (configurable in `tune_model()`)

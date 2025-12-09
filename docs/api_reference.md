@@ -13,6 +13,7 @@ Complete API documentation for all modules in the NFL Analytics Engine.
 | `src.metrics` | Custom metrics | `calculate_zone_collapse_speed`, `calculate_defensive_reaction_time` |
 | `src.visualization` | Plotting tools | `plot_play_frame`, `animate_play`, `plot_attention_map` |
 | `src.train` | Training loop | `NFLGraphPredictor`, `train_model`, `tune_model` |
+| `train_production` | Production trainer (YAML + logging) | `ProductionConfig`, `ProductionTrainer`, `DataValidator` |
 
 ---
 
@@ -720,6 +721,45 @@ plt.show()
 | PyTorch Geometric | Latest | Auto-installed |
 | Polars | 0.20+ | Fast data processing |
 | PyTorch Lightning | 2.2+ | Training framework |
+
+---
+
+## train_production
+
+### ProductionConfig
+Dataclass-style container built from CLI/YAML.
+
+**Key fields (subset):**
+- Data: `data_dir`, `weeks`, `train_split=0.8`, `val_split=0.1`, `validate_data`
+- Model: `hidden_dim=128`, `num_gnn_layers=6`, `heads=8`, `probabilistic=True`, `num_modes=8`, `droppath_rate=0.08`
+- Training: `batch_size=64`, `accumulate_grad_batches=2`, `max_epochs=100`, `precision='bf16-mixed'`
+- Loss/regularization: `velocity_weight=0.3`, `acceleration_weight=0.1`, `collision_weight=0.05`, `coverage_weight=0.5`, `use_huber_loss=True`, `label_smoothing=0.05`
+- Experiment: `experiment_name`, `use_mlflow`, `use_wandb`, `use_tensorboard`
+- Production: `export_onnx`, `export_torchscript`, `enable_sample_batch_warmup`, `enable_profiling`
+
+### ProductionTrainer
+
+```python
+trainer = ProductionTrainer(config)
+trainer.train(resume_from=None)
+```
+
+**Responsibilities:**
+- Validates data (`DataValidator`) and shows a per-week summary
+- Builds deterministic play splits and persists them to `outputs/splits_production.json`
+- Creates cached graph datasets (`cache/graphs`) and PyG dataloaders
+- Instantiates `NFLGraphPredictor` with probabilistic or deterministic decoder
+- Configures callbacks: EarlyStopping, ModelCheckpoint, LR Monitor, SWA, EpochSummary, optional AttentionVisualization
+- Saves resolved config to `outputs/<experiment>_config.json` (e.g., `nfl_production_v2_config.json`)
+- Exports TorchScript/ONNX to `outputs/exported_models/` when enabled
+
+### DataValidator
+
+```python
+valid, issues = DataValidator.validate_dataframe(df, week=1)
+```
+
+Checks required columns, nulls, range violations, and duplicate frames before training.
 
 ---
 

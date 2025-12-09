@@ -68,6 +68,11 @@ cuda_version = torch.version.cuda.replace('.', '')
 !python train_production.py --mode train --config configs/production.yaml
 ```
 
+- Config snapshot saved to `outputs/nfl_production_v2_config.json`
+- Deterministic splits persisted to `outputs/splits_production.json` (auto-reused on reruns)
+- Exports TorchScript/ONNX to `outputs/exported_models/` when enabled
+- `--enable-sample-batch-warmup` warms callbacks with a validation batch (default off)
+
 ---
 
 ## 📁 Project Structure
@@ -100,11 +105,11 @@ NFL_Project/
 **Use for:** Final model training with all data
 
 **Features:**
-- All 18 weeks of data
-- 100 epochs with early stopping
-- Mixed precision (FP16)
-- Full experiment tracking
-- Model export enabled
+- All 18 weeks of data with deterministic play splits
+- 6-layer GATv2 (hidden_dim=128, heads=8), probabilistic 8-mode decoder, DropPath=0.08
+- AdamW (lr=5e-4, wd=0.05) + cosine warmup + SWA @ 75% epochs
+- bf16 mixed precision (RTX 40 friendly), grad accumulation (effective batch 128)
+- Exports TorchScript/ONNX + saves config snapshot and splits
 
 **Expected Time:** 1-2 hours on T4 GPU
 

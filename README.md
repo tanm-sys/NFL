@@ -69,6 +69,17 @@ pip install .
 python -m src.train --mode train --sanity
 ```
 
+### Production Training (full dataset, reproducible)
+
+```bash
+# Reproducible split + config snapshot
+python train_production.py --config configs/production.yaml
+```
+
+- Saves the exact run config to `outputs/nfl_production_v2_config.json`
+- Persists deterministic play splits to `outputs/splits_production.json` (reused on the next run)
+- Exports models to `outputs/exported_models/` when enabled in the config
+
 ### Full Training
 
 ```bash
@@ -151,6 +162,8 @@ nfl-analytics-engine/
 ├── notebooks/               # Jupyter analysis notebooks
 ├── train/                   # Training data (input_2023_w*.csv)
 ├── pyproject.toml           # Project dependencies
+├── train_production.py      # Production-grade trainer (config-driven)
+├── configs/                 # YAML configs (production, sanity, probabilistic)
 └── README.md
 ```
 

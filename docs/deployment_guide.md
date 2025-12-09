@@ -15,6 +15,8 @@ This guide covers deploying the trained NFL model for production inference:
 - **Scaling**: Auto-scaling and load balancing
 - **CI/CD**: Automated deployment pipelines
 
+Production runs export TorchScript/ONNX artifacts to `outputs/exported_models/` and record the exact config in `outputs/nfl_production_v2_config.json`, ensuring deploys are tied to reproducible training runs.
+
 ---
 
 ## 🏗️ Architecture
@@ -57,7 +59,7 @@ app = FastAPI(
 )
 
 # Load model (TorchScript for production)
-MODEL_PATH = "outputs/exported_models/nfl_production_torchscript.pt"
+MODEL_PATH = "outputs/exported_models/nfl_production_v2_torchscript.pt"
 model = None
 
 @app.on_event("startup")

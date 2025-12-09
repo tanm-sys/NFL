@@ -109,7 +109,8 @@ def load_ensemble(checkpoint_paths: List[str], model_class, **model_kwargs):
     models = []
     for path in checkpoint_paths:
         model = model_class(**model_kwargs)
-        checkpoint = torch.load(path, map_location='cpu')
+        # weights_only=False needed for Lightning checkpoints (PyTorch 2.6+)
+        checkpoint = torch.load(path, map_location='cpu', weights_only=False)
         
         # Handle Lightning checkpoint format
         if 'state_dict' in checkpoint:

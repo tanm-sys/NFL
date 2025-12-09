@@ -42,6 +42,11 @@ graph TB
     end
 ```
 
+### Production data management (new)
+- Deterministic splits are written and reused via `outputs/splits_production.json` so train/val/test plays stay consistent across runs.
+- Graphs are cached under `cache/graphs` (disk + in-memory LRU) to accelerate subsequent epochs.
+- Each production run saves the resolved parameters to `outputs/nfl_production_v2_config.json` for reproducibility.
+
 ## Detailed Pipeline Steps
 
 ### 1. Data Ingestion (`src/data_loader.py`)

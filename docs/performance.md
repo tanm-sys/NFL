@@ -8,11 +8,11 @@ This document provides performance benchmarks, optimization strategies, and best
 
 | Metric | Description | Target | Current* |
 |--------|-------------|--------|----------|
-| **ADE** | Average Displacement Error | < 2.0 yards | TBD |
-| **FDE** | Final Displacement Error | < 3.5 yards | TBD |
-| **Miss Rate** | % predictions > 5 yards off | < 20% | TBD |
+| **ADE** | Average Displacement Error | < 0.50 yards | TBD |
+| **FDE** | Final Displacement Error | < 0.90 yards | TBD |
+| **Miss Rate (2yd)** | % predictions > 2 yards off | < 10% | TBD |
 
-*Run training to populate current metrics
+*Targets mirror `configs/production.yaml`; run a production training to populate current metrics. Deterministic splits are stored at `outputs/splits_production.json`.
 
 **Metric Definitions:**
 
@@ -32,10 +32,10 @@ $$FDE = \frac{1}{N} \sum_{i=1}^{N} \|\hat{y}_{i,T} - y_{i,T}\|_2$$
 
 | Metric | Description | Target | Current* |
 |--------|-------------|--------|----------|
-| **Accuracy** | Man vs Zone classification | > 70% | TBD |
-| **Precision** | True positives / (TP + FP) | > 65% | TBD |
-| **Recall** | True positives / (TP + FN) | > 65% | TBD |
-| **F1 Score** | Harmonic mean of P and R | > 65% | TBD |
+| **Accuracy** | Man vs Zone classification | > 90% | TBD |
+| **Precision** | True positives / (TP + FP) | > 85% | TBD |
+| **Recall** | True positives / (TP + FN) | > 85% | TBD |
+| **F1 Score** | Harmonic mean of P and R | > 85% | TBD |
 
 ---
 

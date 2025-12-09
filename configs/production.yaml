@@ -25,25 +25,25 @@ model:
   num_gnn_layers: 6
   heads: 8
   dropout: 0.15
-  droppath_rate: 0.1       # NEW: Stochastic depth regularization
-  probabilistic: false
-  num_modes: 6
+  droppath_rate: 0.08      # Stabilize stochastic depth
+  probabilistic: true      # Enable multi-modal decoding
+  num_modes: 8             # Higher-quality multi-modality
   use_scene_encoder: true
 
 # Training Configuration
 training:
   batch_size: 64
-  learning_rate: 0.001
+  learning_rate: 0.0005
   max_epochs: 100
   min_epochs: 20
   num_workers: 4
-  accumulate_grad_batches: 1
+  accumulate_grad_batches: 2   # Effective batch = 128
 
 # Optimization (SOTA)
 optimizer:
-  type: "lion"             # NEW: Lion optimizer (auto-fallback to AdamW)
-  weight_decay: 0.01       # Higher for Lion
-  betas: [0.9, 0.99]       # Lion betas
+  type: "adamw"            # Prefer stable AdamW for quality
+  weight_decay: 0.05
+  betas: [0.9, 0.999]
   eps: 1.0e-08
 
 # Learning Rate Scheduler
@@ -55,10 +55,10 @@ lr_scheduler:
 # Loss Weights (Multi-task learning)
 loss_weights:
   trajectory: 1.0
-  velocity: 0.35
-  acceleration: 0.15
+  velocity: 0.3
+  acceleration: 0.1
   collision: 0.05
-  coverage: 0.5
+  coverage: 0.4
 
 # Regularization (Enhanced)
 regularization:
@@ -66,7 +66,7 @@ regularization:
   use_augmentation: true
   use_huber_loss: true
   huber_delta: 1.0
-  label_smoothing: 0.1
+  label_smoothing: 0.05
 
 # Hardware Configuration (RTX 40 series optimized)
 hardware:

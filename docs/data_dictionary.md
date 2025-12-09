@@ -110,8 +110,10 @@ These features are constant for the entire play and represent game state.
 | `down` | Int64 | Plays | 1-4 | Current down | Raw (1-4) |
 | `yards_to_go` | Int64 | Plays | 1-99 | Yards to first down | Raw |
 | `defenders_box_norm` | Float32 | Plays | ~-2 to 2 | Normalized defenders in box | `(N - 7) / 2` |
+| `coverage_label` | Int64 | Plays | {0,1} | Coverage type (0=Man, 1=Zone) | Derived from `team_coverage_man_zone` |
 
-**Context Vector Shape:** `[Batch_Size, 3]`
+**Context Vector Shape:** `[Batch_Size, 3]` (down, yards_to_go, defenders_box_norm)  
+`coverage_label` is stored separately and used as the coverage target.
 
 ### Context Normalization
 

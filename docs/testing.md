@@ -50,6 +50,21 @@ Epoch 0: train_loss=2.45, val_loss=2.31, val_ade=1.85, val_fde=3.21
 
 **Typical runtime:** 30-60 seconds (GPU), 2-3 minutes (CPU)
 
+### Production Smoke Test (deterministic splits)
+
+```bash
+python train_production.py \
+  --config configs/production.yaml \
+  --limit-train-batches 0.1 \
+  --limit-val-batches 0.2 \
+  --no-validation \
+  --enable-sample-batch-warmup
+```
+
+- Reuses splits from `outputs/splits_production.json` for repeatability
+- Writes the resolved config to `outputs/nfl_production_v2_config.json` even in smoke mode
+- Expect <10 minutes on GPU with the above limits
+
 ---
 
 ## 2. Phase Verification Scripts

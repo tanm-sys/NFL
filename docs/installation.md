@@ -460,17 +460,25 @@ After successful installation:
    - [Architecture](architecture.md) - Understand the model design
    - [Configuration](configuration.md) - Customize hyperparameters
 
-2. **Run Sanity Check:**
+2. **Run Sanity Check (fast smoke test):**
    ```bash
    python -m src.train --mode train --sanity
    ```
 
-3. **Explore Notebooks:**
+3. **Production Training (deterministic splits + artifacts):**
+   ```bash
+   python train_production.py --config configs/production.yaml
+   ```
+   - Saves config snapshot to `outputs/nfl_production_v2_config.json`
+   - Reuses deterministic play splits in `outputs/splits_production.json`
+   - Exports models to `outputs/exported_models/` when enabled
+
+4. **Explore Notebooks:**
    ```bash
    jupyter notebook notebooks/01_eda.ipynb
    ```
 
-4. **Start Training:**
+5. **Start (research) Training Loop:**
    ```bash
    python -m src.train --mode train
    ```

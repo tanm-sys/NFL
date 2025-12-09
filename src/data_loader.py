@@ -251,7 +251,8 @@ class GraphDataset(Dataset):
         if self.cache_dir is not None:
             disk_path = self.cache_dir / f"{key}.pt"
             if disk_path.exists():
-                graphs = torch.load(disk_path)
+                # weights_only=False needed for PyTorch Geometric objects (PyTorch 2.6+)
+                graphs = torch.load(disk_path, weights_only=False)
                 self._set_mem_cache(key, graphs)
                 return graphs
 

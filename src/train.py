@@ -248,7 +248,9 @@ class NFLGraphPredictor(pl.LightningModule):
     def __init__(self, input_dim=9, hidden_dim=64, lr=1e-3, future_seq_len=10,
                  probabilistic=False, num_modes=6, velocity_weight=0.3, 
                  acceleration_weight=0.1, coverage_weight=0.5, collision_weight=0.05,
-                 use_augmentation=True, use_huber_loss=False, huber_delta=1.0):
+                 use_augmentation=True, use_huber_loss=False, huber_delta=1.0,
+                 weight_decay=0.05, optimizer_type="adamw", warmup_epochs=5,
+                 label_smoothing=0.05, miss_threshold=2.5):
         super().__init__()
         self.save_hyperparameters()
         
@@ -267,6 +269,11 @@ class NFLGraphPredictor(pl.LightningModule):
         self.use_augmentation = use_augmentation
         self.use_huber_loss = use_huber_loss
         self.huber_delta = huber_delta
+        self.weight_decay = weight_decay
+        self.optimizer_type = optimizer_type
+        self.warmup_epochs = warmup_epochs
+        self.label_smoothing = label_smoothing
+        self.miss_threshold = miss_threshold
 
     def forward(self, data):
         return self.model(data)
@@ -285,6 +292,7 @@ class NFLGraphPredictor(pl.LightningModule):
         # Apply augmentation
         batch = self._augment_batch(batch)
         valid_mask = batch.valid_mask if hasattr(batch, "valid_mask") else None
+        early_phase = self.current_epoch < 6
         
         # Forward pass
         if self.probabilistic:
@@ -339,17 +347,28 @@ class NFLGraphPredictor(pl.LightningModule):
             target_cov = batch.y_coverage.view(-1, 1)
             cov_mask = (target_cov >= 0).squeeze()  # -1.0 = missing
             if cov_mask.any():
+                if self.label_smoothing > 0:
+                    target_cov = target_cov * (1 - self.label_smoothing) + 0.5 * self.label_smoothing
                 loss_cov = F.binary_cross_entropy_with_logits(
                     cov_pred[cov_mask], target_cov[cov_mask]
                 )
                 self.log("train_cov_loss", loss_cov, batch_size=cov_mask.sum())
              
         # Total Loss (Weighted) - All P0/P1/P2 losses
+        if early_phase:
+            vel_w, acc_w, col_w, cov_w = 0.2, 0.05, 0.02, 0.2
+        else:
+            vel_w, acc_w, col_w, cov_w = (
+                self.velocity_weight,
+                self.acceleration_weight,
+                self.collision_weight,
+                self.coverage_weight,
+            )
         loss = (loss_traj + 
-                self.velocity_weight * loss_vel + 
-                self.acceleration_weight * loss_acc +
-                self.collision_weight * loss_collision +
-                self.coverage_weight * loss_cov)
+                vel_w * loss_vel + 
+                acc_w * loss_acc +
+                col_w * loss_collision +
+                cov_w * loss_cov)
         self.log("train_loss", loss, batch_size=batch.num_graphs)
         return loss
         
@@ -398,16 +417,20 @@ class NFLGraphPredictor(pl.LightningModule):
             ade = torch.tensor(0.0, device=self.device)
             fde = torch.tensor(0.0, device=self.device)
             miss_rate = torch.tensor(0.0, device=self.device)
+            miss_rate_loose = torch.tensor(0.0, device=self.device)
         else:
             ade = torch.mean(disp)
             fde = torch.mean(disp[:, -1])
-            miss_threshold = 2.0
-            miss_rate = (disp[:, -1] > miss_threshold).float().mean()
+            miss_threshold_strict = 2.0
+            miss_threshold_loose = float(self.miss_threshold)
+            miss_rate = (disp[:, -1] > miss_threshold_strict).float().mean()
+            miss_rate_loose = (disp[:, -1] > miss_threshold_loose).float().mean()
         
         self.log("val_loss_traj", loss_traj, batch_size=batch.num_graphs)
         self.log("val_ade", ade, batch_size=batch.num_graphs)
         self.log("val_fde", fde, batch_size=batch.num_graphs)
         self.log("val_miss_rate_2yd", miss_rate, batch_size=batch.num_graphs)
+        self.log(f"val_miss_rate_{int(self.miss_threshold*10):02d}tenth_yd", miss_rate_loose, batch_size=batch.num_graphs)
 
         # Stratified metrics by role and down
         if disp.numel() > 0:
@@ -494,23 +517,25 @@ class NFLGraphPredictor(pl.LightningModule):
         Configure optimizer with Lion (SOTA) or AdamW fallback.
         Lion uses ~3x lower LR and higher weight decay than AdamW.
         """
-        # Try Lion optimizer (faster convergence, less memory)
-        try:
-            from lion_pytorch import Lion
-            # Lion uses lower LR (0.3x) and higher weight decay (10x) than AdamW
-            optimizer = Lion(
-                self.parameters(), 
-                lr=self.lr * 0.3,  # Scale down LR for Lion
-                weight_decay=0.01,  # Higher weight decay for Lion
-                betas=(0.9, 0.99)
-            )
-            print("🦁 Using Lion optimizer (SOTA)")
-        except ImportError:
-            # Fallback to AdamW
+        optimizer = None
+        if self.optimizer_type.lower() == "lion":
+            try:
+                from lion_pytorch import Lion
+                optimizer = Lion(
+                    self.parameters(), 
+                    lr=self.lr * 0.3,
+                    weight_decay=self.weight_decay,
+                    betas=(0.9, 0.99)
+                )
+                print("🦁 Using Lion optimizer")
+            except ImportError:
+                print("Lion not available, falling back to AdamW")
+        
+        if optimizer is None:
             optimizer = torch.optim.AdamW(
                 self.parameters(), 
                 lr=self.lr, 
-                weight_decay=1e-4
+                weight_decay=self.weight_decay
             )
             print("📈 Using AdamW optimizer")
         
@@ -521,7 +546,7 @@ class NFLGraphPredictor(pl.LightningModule):
             optimizer, 
             start_factor=0.1, 
             end_factor=1.0,
-            total_iters=5
+            total_iters=self.warmup_epochs
         )
         
         cosine_scheduler = CosineAnnealingWarmRestarts(
@@ -534,7 +559,7 @@ class NFLGraphPredictor(pl.LightningModule):
         combined_scheduler = SequentialLR(
             optimizer,
             schedulers=[warmup_scheduler, cosine_scheduler],
-            milestones=[5]
+            milestones=[self.warmup_epochs]
         )
         
         return {

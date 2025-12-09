@@ -26,6 +26,13 @@ The NFL Analytics Engine is a **Hybrid Graph-Transformer** model designed to sol
 12. **⚡ RTX 40 Optimizations**: bf16-mixed, TF32, Tensor Cores, cuDNN benchmark (torch.compile disabled for PyG compatibility)
 13. **📦 New Libraries**: `lion-pytorch`, `einops`, `safetensors`, `timm`
 
+**Production v2 defaults (configs/production.yaml):**
+- 6× GATv2 layers, hidden_dim=128, heads=8, dropout=0.15, droppath_rate=0.08
+- Probabilistic 8-mode decoder enabled by default
+- bf16 mixed precision + SWA and cosine warmup scheduler
+- Deterministic play splits persisted to `outputs/splits_production.json`
+- Config snapshot written to `outputs/nfl_production_v2_config.json`
+
 ## High-Level Architecture
 
 ```mermaid

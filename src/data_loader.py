@@ -1,6 +1,7 @@
 import polars as pl
 import pandas as pd
 import os
+import re
 from pathlib import Path
 from typing import List, Optional, Union, Tuple, Dict
 import torch
@@ -101,6 +102,82 @@ class DataLoader:
         df = tracking_df.join(play_context, on=["game_id", "play_id"], how="inner")
             
         return df
+
+    def load_plays(self) -> pl.DataFrame:
+        """
+        Load supplementary data (plays and game info).
+        """
+        filepath = self.data_dir / "supplementary_data.csv"
+        
+        if not filepath.exists():
+            raise FileNotFoundError(f"File not found: {filepath}")
+            
+        df = pl.read_csv(filepath, null_values=["NA"], infer_schema_length=5000)
+        df = self._standardize_columns(df)
+        return df
+
+    def load_games(self) -> pl.DataFrame:
+        """
+        Return unique games from supplementary data.
+        """
+        df = self.load_plays()
+        return df.unique(subset=["game_id"])
+
+    def _standardize_columns(self, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Standardize column names to snake_case (handles camelCase/PascalCase).
+        """
+        renamed = {}
+        # Known aliases that frequently appear without underscores
+        aliases = {
+            "playdirection": "play_direction",
+            "gameid": "game_id",
+            "playid": "play_id",
+        }
+        for col in df.columns:
+            # Insert underscores before capitals, then lowercase.
+            snake = re.sub(r"(?<!^)(?=[A-Z])", "_", col)
+            # Normalize common separators/spaces.
+            snake = snake.replace("-", "_").replace(" ", "_").lower()
+            # Apply aliases to fix missing underscores in common keys.
+            snake = aliases.get(snake, snake)
+            renamed[col] = snake
+        return df.rename(renamed)
+
+    def standardize_tracking_directions(self, df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Adjust coordinates so all plays go left to right.
+        Standard NFL Big Data Bowl logic.
+        """
+        cols = df.columns
+        if 'play_direction' not in cols and 'playdirection' not in cols and 'playDirection' not in cols:
+            return df
+            
+        df = self._standardize_columns(df)
+        
+        return df.with_columns([
+            pl.when(pl.col('play_direction') == 'left')
+            .then(120 - pl.col('x'))
+            .otherwise(pl.col('x'))
+            .alias('std_x'),
+            
+            pl.when(pl.col('play_direction') == 'left')
+            .then(53.3 - pl.col('y'))
+            .otherwise(pl.col('y'))
+            .alias('std_y'),
+             
+             # Orientation
+            pl.when(pl.col('play_direction') == 'left')
+            .then((pl.col('o') + 180).mod(360))
+            .otherwise(pl.col('o'))
+            .alias('std_o'),
+            
+             # Direction (motion)
+            pl.when(pl.col('play_direction') == 'left')
+            .then((pl.col('dir') + 180).mod(360))
+            .otherwise(pl.col('dir'))
+            .alias('std_dir'),
+        ])
 
 
 class GraphDataset(Dataset):
@@ -285,86 +362,6 @@ def expand_play_tuples(
         for local_idx in range(num_graphs):
             tuples.append((week, game_id, play_id, local_idx))
     return tuples
-
-    def load_plays(self) -> pl.DataFrame:
-        """
-        Load supplementary data (plays and game info).
-        """
-        filepath = self.data_dir / "supplementary_data.csv"
-        
-        if not filepath.exists():
-            # Fallback to checking if games/plays exist separately or just return empty/raise
-            raise FileNotFoundError(f"File not found: {filepath}")
-            
-        df = pl.read_csv(filepath, null_values=["NA"], infer_schema_length=5000)
-        df = self._standardize_columns(df)
-        return df
-
-    def load_games(self) -> pl.DataFrame:
-        # supplementary_data.csv seems to contain game info as well (game_id, season, week, etc.)
-        # so we can just return unique game rows from there
-        df = self.load_plays()
-        return df.unique(subset=["game_id"])
-
-    def _standardize_columns(self, df: pl.DataFrame) -> pl.DataFrame:
-        """
-        Standardize column names to snake_case if needed.
-        """
-        df = df.rename({col: col.lower() for col in df.columns})
-        return df
-
-    def standardize_tracking_directions(self, df: pl.DataFrame) -> pl.DataFrame:
-        """
-        Adjust coordinates so all plays go left to right.
-        Standard NFL Big Data Bowl logic.
-        """
-        # Polars implementation of standardization
-        # If playDirection is 'left', flip x and y derivatives
-        
-        # Check if play_direction column exists (usually 'playDirection')
-        cols = df.columns
-        if 'play_direction' not in cols and 'playdirection' not in cols and 'playDirection' not in cols:
-            return df
-            
-        # Ensure we work with lowercase
-        df = self._standardize_columns(df)
-        
-        # Determine plays to flip
-        # x: 0 to 120 (including endzones)
-        # y: 0 to 53.3
-        
-        # Condition: play_direction == 'left'
-        # x_new = 120 - x
-        # y_new = 53.3 - y
-        # dir_new = (dir + 180) % 360
-        # o_new = (o + 180) % 360
-        
-        # This is a bit complex in Polars lazy expression, doing eager for simplicity first
-        # optimized later
-        
-        return df.with_columns([
-            pl.when(pl.col('play_direction') == 'left')
-            .then(120 - pl.col('x'))
-            .otherwise(pl.col('x'))
-            .alias('std_x'),
-            
-            pl.when(pl.col('play_direction') == 'left')
-            .then(53.3 - pl.col('y'))
-            .otherwise(pl.col('y'))
-            .alias('std_y'),
-             
-             # Orientation
-            pl.when(pl.col('play_direction') == 'left')
-            .then((pl.col('o') + 180).mod(360))
-            .otherwise(pl.col('o'))
-            .alias('std_o'),
-            
-             # Direction (motion)
-            pl.when(pl.col('play_direction') == 'left')
-            .then((pl.col('dir') + 180).mod(360))
-            .otherwise(pl.col('dir'))
-            .alias('std_dir'),
-        ])
 
 if __name__ == "__main__":
     # Test

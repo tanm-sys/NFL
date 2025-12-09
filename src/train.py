@@ -5,12 +5,13 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 import optuna
 from torch_geometric.loader import DataLoader as PyGDataLoader
+from torch_geometric.data import Batch
 from src.models.gnn import NFLGraphTransformer
-from src.features import create_graph_data
+from src.features import create_graph_data, build_edge_index_and_attr
 import numpy as np
 
 
-def velocity_loss(pred, target):
+def velocity_loss(pred, target, mask=None):
     """
     Penalize unrealistic trajectory velocity changes.
     Encourages smooth, physically plausible trajectories.
@@ -22,12 +23,19 @@ def velocity_loss(pred, target):
     Returns:
         loss: scalar velocity consistency loss
     """
+    if mask is not None:
+        mask = mask.bool()
+        if mask.sum() == 0:
+            return torch.tensor(0.0, device=pred.device)
+        pred = pred[mask]
+        target = target[mask]
+
     pred_vel = pred[:, 1:] - pred[:, :-1]  # [N, T-1, 2]
     target_vel = target[:, 1:] - target[:, :-1]  # [N, T-1, 2]
     return F.mse_loss(pred_vel, target_vel)
 
 
-def acceleration_loss(pred, target):
+def acceleration_loss(pred, target, mask=None):
     """
     Penalize unrealistic acceleration patterns (P1 enhancement).
     Second-order smoothness constraint for more realistic motion.
@@ -42,6 +50,13 @@ def acceleration_loss(pred, target):
     if pred.shape[1] < 3:
         return torch.tensor(0.0, device=pred.device)
     
+    if mask is not None:
+        mask = mask.bool()
+        if mask.sum() == 0:
+            return torch.tensor(0.0, device=pred.device)
+        pred = pred[mask]
+        target = target[mask]
+
     pred_vel = pred[:, 1:] - pred[:, :-1]  # [N, T-1, 2]
     target_vel = target[:, 1:] - target[:, :-1]
     
@@ -51,7 +66,7 @@ def acceleration_loss(pred, target):
     return F.mse_loss(pred_acc, target_acc)
 
 
-def collision_avoidance_loss(pred_positions, batch_idx, min_distance=1.0):
+def collision_avoidance_loss(pred_positions, batch_idx, min_distance=1.0, valid_mask=None):
     """
     Penalize predictions where players occupy the same space (P1 enhancement).
     Encourages physically plausible non-overlapping trajectories.
@@ -73,6 +88,9 @@ def collision_avoidance_loss(pred_positions, batch_idx, min_distance=1.0):
     
     for b in batch_idx.unique():
         mask = batch_idx == b
+        if valid_mask is not None:
+            mask = mask & valid_mask
+
         pos = pred_positions[mask]  # [n_nodes, T, 2]
         
         if pos.shape[0] < 2:
@@ -96,36 +114,75 @@ def collision_avoidance_loss(pred_positions, batch_idx, min_distance=1.0):
 
 def augment_graph(data, flip_horizontal=True, add_noise=True, noise_std=0.1):
     """
-    Apply data augmentation to graph data.
-    
-    Args:
-        data: PyG Data object
-        flip_horizontal: Mirror play horizontally
-        add_noise: Add Gaussian noise to positions
-        noise_std: Standard deviation of noise
-    
-    Returns:
-        Augmented data object
+    Apply data augmentation and rebuild graph geometry to keep edges consistent.
     """
     data = data.clone()
-    
+    pos = data.x[:, :2].clone()
+    speed = data.x[:, 2].clone() if data.x.size(1) > 2 else None
+    acc = data.x[:, 3].clone() if data.x.size(1) > 3 else None
+    weight = data.x[:, 8].clone() if data.x.size(1) > 8 else None
+    dir_raw = getattr(data, "dir_raw", None)
+    ori_raw = getattr(data, "ori_raw", None)
+    valid_mask = getattr(data, "valid_mask", None)
+    side = data.side if hasattr(data, "side") else None
+
     if flip_horizontal and torch.rand(1).item() > 0.5:
-        # Flip y coordinate (field is 53.3 yards wide)
-        data.x[:, 1] = 53.3 - data.x[:, 1]  # Flip y position
-        if data.x.size(1) > 4:
-            data.x[:, 4] = (360 - data.x[:, 4]) % 360  # Flip direction
-        if data.x.size(1) > 5:
-            data.x[:, 5] = (360 - data.x[:, 5]) % 360  # Flip orientation
-        
-        # Flip targets
-        if hasattr(data, 'y') and data.y is not None:
-            data.y[:, :, 1] = 53.3 - data.y[:, :, 1]
-    
+        pos[:, 1] = 53.3 - pos[:, 1]
+        if dir_raw is not None:
+            dir_raw = (360 - dir_raw) % 360
+        if ori_raw is not None:
+            ori_raw = (360 - ori_raw) % 360
+        if hasattr(data, "y") and data.y is not None:
+            data.y[:, :, 1] = -data.y[:, :, 1]
+
     if add_noise:
-        # Add small noise to positions
-        noise = torch.randn_like(data.x[:, :2]) * noise_std
-        data.x[:, :2] = data.x[:, :2] + noise
-    
+        noise = torch.randn_like(pos) * noise_std
+        pos = pos + noise
+        if hasattr(data, "y") and data.y is not None:
+            data.y = data.y - noise.unsqueeze(1)
+
+    # Recompute angular features (sin/cos)
+    if dir_raw is not None:
+        dir_sin = torch.sin(torch.deg2rad(dir_raw))
+        dir_cos = torch.cos(torch.deg2rad(dir_raw))
+    else:
+        if data.x.size(1) > 5:
+            dir_sin = data.x[:, 4]
+            dir_cos = data.x[:, 5]
+        else:
+            dir_sin = torch.zeros_like(pos[:, 0])
+            dir_cos = torch.zeros_like(pos[:, 0])
+
+    if ori_raw is not None:
+        ori_sin = torch.sin(torch.deg2rad(ori_raw))
+        ori_cos = torch.cos(torch.deg2rad(ori_raw))
+    else:
+        ori_sin = data.x[:, 6] if data.x.size(1) > 6 else torch.zeros_like(pos[:, 0])
+        ori_cos = data.x[:, 7] if data.x.size(1) > 7 else torch.zeros_like(pos[:, 0])
+
+    weight = weight if weight is not None else torch.zeros_like(pos[:, 0])
+    acc = acc if acc is not None else torch.zeros_like(pos[:, 0])
+    speed = speed if speed is not None else torch.zeros_like(pos[:, 0])
+
+    data.x = torch.stack(
+        [pos[:, 0], pos[:, 1], speed, acc, dir_sin, dir_cos, ori_sin, ori_cos, weight],
+        dim=-1,
+    )
+
+    data.pos = pos
+    data.current_pos = pos
+    radius = float(getattr(data, "edge_radius", 20.0))
+    direction_for_edges = dir_raw if dir_raw is not None else torch.zeros_like(speed)
+    edge_index, edge_attr = build_edge_index_and_attr(
+        pos, speed, direction_for_edges, side, radius, valid_mask=valid_mask if isinstance(valid_mask, torch.Tensor) else None
+    )
+    data.edge_index = edge_index
+    data.edge_attr = edge_attr
+    if dir_raw is not None:
+        data.dir_raw = dir_raw
+    if ori_raw is not None:
+        data.ori_raw = ori_raw
+
     return data
 
 
@@ -163,12 +220,17 @@ class NFLGraphPredictor(pl.LightningModule):
     def _augment_batch(self, batch):
         """Apply augmentation during training if enabled."""
         if self.use_augmentation and self.training:
+            if isinstance(batch, Batch):
+                data_list = batch.to_data_list()
+                aug_list = [augment_graph(b, flip_horizontal=True, add_noise=True) for b in data_list]
+                return Batch.from_data_list(aug_list)
             return augment_graph(batch, flip_horizontal=True, add_noise=True)
         return batch
         
     def training_step(self, batch, batch_idx):
         # Apply augmentation
         batch = self._augment_batch(batch)
+        valid_mask = batch.valid_mask if hasattr(batch, "valid_mask") else None
         
         # Forward pass
         if self.probabilistic:
@@ -176,7 +238,13 @@ class NFLGraphPredictor(pl.LightningModule):
             
             # GMM NLL Loss
             y = batch.y  # [N, T, 2]
-            loss_traj = self.model.decoder.nll_loss(params, mode_probs, y)
+            if valid_mask is not None and valid_mask.sum() > 0:
+                mask_nodes = valid_mask.bool()
+                loss_traj = self.model.decoder.nll_loss(params[mask_nodes], mode_probs[mask_nodes], y[mask_nodes])
+            elif valid_mask is None:
+                loss_traj = self.model.decoder.nll_loss(params, mode_probs, y)
+            else:
+                loss_traj = torch.tensor(0.0, device=self.device)
             
             # Best mode prediction for metrics
             predictions = params[..., :2].mean(dim=2)  # Average over modes for velocity loss
@@ -185,24 +253,29 @@ class NFLGraphPredictor(pl.LightningModule):
             
             # Loss: MSE or Huber (P2)
             y = batch.y
-            if self.use_huber_loss:
-                loss_traj = F.huber_loss(predictions, y, delta=self.huber_delta)
+            if valid_mask is not None and valid_mask.sum() == 0:
+                loss_traj = torch.tensor(0.0, device=self.device)
             else:
-                loss_traj = F.mse_loss(predictions, y)
+                target = y if valid_mask is None else y[valid_mask]
+                pred_target = predictions if valid_mask is None else predictions[valid_mask]
+                if self.use_huber_loss:
+                    loss_traj = F.huber_loss(pred_target, target, delta=self.huber_delta)
+                else:
+                    loss_traj = F.mse_loss(pred_target, target)
         
         self.log("train_traj_loss", loss_traj, batch_size=batch.num_graphs)
         
         # Velocity Loss
-        loss_vel = velocity_loss(predictions, y)
+        loss_vel = velocity_loss(predictions, y, mask=valid_mask)
         self.log("train_vel_loss", loss_vel, batch_size=batch.num_graphs)
         
         # Acceleration Loss (P1)
-        loss_acc = acceleration_loss(predictions, y)
+        loss_acc = acceleration_loss(predictions, y, mask=valid_mask)
         self.log("train_acc_loss", loss_acc, batch_size=batch.num_graphs)
         
         # Collision Avoidance Loss (P1)
         batch_idx = batch.batch if hasattr(batch, 'batch') else None
-        loss_collision = collision_avoidance_loss(predictions, batch_idx)
+        loss_collision = collision_avoidance_loss(predictions, batch_idx, valid_mask=valid_mask)
         self.log("train_collision_loss", loss_collision, batch_size=batch.num_graphs)
         
         # Coverage Loss (BCE) - filter out missing coverage labels (sentinel value -1.0)
@@ -233,29 +306,40 @@ class NFLGraphPredictor(pl.LightningModule):
             predictions, cov_pred, _ = self(batch)
         
         y = batch.y  # Relative targets
+        valid_mask = batch.valid_mask if hasattr(batch, "valid_mask") else None
+        if valid_mask is not None:
+            valid_mask = valid_mask.bool()
         
         # Convert predictions to absolute positions for metrics
         if hasattr(batch, 'current_pos'):
             current_pos = batch.current_pos.unsqueeze(1)  # [N, 1, 2]
-            pred_abs = predictions + current_pos  # Cumulative prediction
-            target_abs = y + current_pos
+            if valid_mask is not None:
+                current_pos = current_pos[valid_mask]
+            pred_abs = (predictions if valid_mask is None else predictions[valid_mask]) + current_pos
+            target_abs = (y if valid_mask is None else y[valid_mask]) + current_pos
         else:
-            pred_abs = predictions
-            target_abs = y
+            pred_abs = predictions if valid_mask is None else predictions[valid_mask]
+            target_abs = y if valid_mask is None else y[valid_mask]
         
         # Traj Validation (on relative for loss, absolute for metrics)
-        loss_traj = F.mse_loss(predictions, y)  # Loss on relative predictions
-        disp = torch.sqrt(torch.sum((pred_abs - target_abs)**2, dim=-1))  # [N, T] - ADE/FDE on absolute
+        if valid_mask is not None and valid_mask.sum() == 0:
+            loss_traj = torch.tensor(0.0, device=self.device)
+            disp = torch.tensor([], device=self.device)
+        else:
+            rel_pred = predictions if valid_mask is None else predictions[valid_mask]
+            rel_target = y if valid_mask is None else y[valid_mask]
+            loss_traj = F.mse_loss(rel_pred, rel_target)
+            disp = torch.sqrt(torch.sum((pred_abs - target_abs)**2, dim=-1))
         
-        # ADE: Average Displacement Error
-        ade = torch.mean(disp)
-        
-        # FDE: Final Displacement Error
-        fde = torch.mean(disp[:, -1])
-        
-        # Miss Rate @ 2 yards
-        miss_threshold = 2.0
-        miss_rate = (disp[:, -1] > miss_threshold).float().mean()
+        if disp.numel() == 0:
+            ade = torch.tensor(0.0, device=self.device)
+            fde = torch.tensor(0.0, device=self.device)
+            miss_rate = torch.tensor(0.0, device=self.device)
+        else:
+            ade = torch.mean(disp)
+            fde = torch.mean(disp[:, -1])
+            miss_threshold = 2.0
+            miss_rate = (disp[:, -1] > miss_threshold).float().mean()
         
         self.log("val_loss_traj", loss_traj, batch_size=batch.num_graphs)
         self.log("val_ade", ade, batch_size=batch.num_graphs)

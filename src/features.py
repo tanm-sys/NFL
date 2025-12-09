@@ -2,9 +2,60 @@ import polars as pl
 import numpy as np
 import h3
 import torch
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from torch_geometric.data import Data
-from torch_geometric.nn import radius_graph
+
+
+def _normalize_angles_deg(angle_deg: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Convert angles in degrees to sine/cosine representation.
+    Returns sin, cos tensors with same shape/device.
+    """
+    angle_rad = torch.deg2rad(angle_deg)
+    return torch.sin(angle_rad), torch.cos(angle_rad)
+
+
+def build_edge_index_and_attr(
+    pos: torch.Tensor,
+    speed: torch.Tensor,
+    direction_deg: torch.Tensor,
+    side: Optional[torch.Tensor],
+    radius: float,
+    valid_mask: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Recompute edge_index and edge_attr given positions and motion features.
+    Edge attributes: normalized distance, relative angle, relative speed,
+    relative direction (normalized), same-team indicator.
+    """
+    dist_matrix = torch.cdist(pos, pos)
+    mask = (dist_matrix < radius) & (dist_matrix > 1e-5)
+
+    if valid_mask is not None:
+        # Only connect nodes that are valid (real agents)
+        valid_outer = valid_mask.unsqueeze(0) & valid_mask.unsqueeze(1)
+        mask = mask & valid_outer
+
+    edge_index = mask.nonzero(as_tuple=False).t().contiguous()
+
+    if edge_index.numel() == 0:
+        return edge_index, torch.zeros((0, 5), device=pos.device, dtype=pos.dtype)
+
+    row_idx, col_idx = edge_index
+    diff = pos[row_idx] - pos[col_idx]
+    dist = torch.norm(diff, p=2, dim=-1, keepdim=True) / radius
+    angle = torch.atan2(diff[:, 1], diff[:, 0]).unsqueeze(-1)
+    rel_speed = (speed[row_idx] - speed[col_idx]).unsqueeze(-1)
+    dir_diff = ((direction_deg[row_idx] - direction_deg[col_idx] + 180) % 360 - 180) / 180.0
+    rel_dir = dir_diff.unsqueeze(-1)
+
+    if side is not None:
+        same_team = (side[row_idx] == side[col_idx]).float().unsqueeze(-1)
+    else:
+        same_team = torch.zeros_like(rel_speed)
+
+    edge_attr = torch.cat([dist, angle, rel_speed, rel_dir, same_team], dim=-1)
+    return edge_index, edge_attr
 
 def calculate_distance_to_ball(df: pl.DataFrame) -> pl.DataFrame:
     """
@@ -183,183 +234,189 @@ def prepare_tensor_data(df: pl.DataFrame, seq_len: int = 10) -> Tuple[torch.Tens
 def create_graph_data(df: pl.DataFrame, radius: float = 20.0, future_seq_len: int = 10, history_len: int = 5) -> List[Data]:
     """
     Converts a dataframe into a list of PyG Data objects (graphs).
-    Optimized: Pivots to Tensor first, then slices.
     Adds:
     - y: Future trajectory [Num_Agents, Future_Seq, 2] (relative)
     - history: Past motion [Num_Agents, History_Len, 4] (vel_x, vel_y, acc_x, acc_y)
     - edge_attr: [Num_Edges, 5] rich edge features
+    - valid_mask: identifies real players (excludes padding/football)
     """
     graph_list = []
-    
+
     # Process per play to avoid cross-play contamination
     play_groups = df.partition_by(["game_id", "play_id"], maintain_order=True)
-    
+
     for play_df in play_groups:
-        # Sort
         play_df = play_df.sort(["frame_id", "nfl_id"])
         pdf = play_df.to_pandas()
-        # Handle Football NaN nfl_id
-        pdf['nfl_id'] = pdf['nfl_id'].fillna(999999)
-        
-        # Determine Context (Single row per play)
-        # Context Features (Global for this play)
+        pdf["nfl_id"] = pdf["nfl_id"].fillna(999999)
+
+        # Context tensors
         context_tensor = None
         formation_tensor = None
         alignment_tensor = None
-        
-        # Extract game_id and play_id for this play (for train/val splitting)
+
         game_id = play_df["game_id"][0]
         play_id = play_df["play_id"][0]
-        
+
         if "down" in play_df.columns and "yards_to_go" in play_df.columns:
             cols = ["down", "yards_to_go"]
             if "defenders_box_norm" in play_df.columns:
                 cols.append("defenders_box_norm")
-                
+
             row = play_df.select(cols).head(1).to_dict(as_series=False)
             down = row["down"][0] if row["down"][0] is not None else 1
             ytg = row["yards_to_go"][0] if row["yards_to_go"][0] is not None else 10
             box = row["defenders_box_norm"][0] if "defenders_box_norm" in row else 0.0
-            
+
             context_tensor = torch.tensor([[down, ytg, box]], dtype=torch.float)
-            
+
         if "formation_id" in play_df.columns:
             fid = play_df["formation_id"][0]
             formation_tensor = torch.tensor([fid], dtype=torch.long)
-            
+
         if "alignment_id" in play_df.columns:
             aid = play_df["alignment_id"][0]
             alignment_tensor = torch.tensor([aid], dtype=torch.long)
-            
-        # Coverage
+
         coverage_tensor = None
         if "coverage_label" in play_df.columns:
             row = play_df.select(["coverage_label"]).head(1).to_dict(as_series=False)
             cov_label = row["coverage_label"][0]
             if cov_label is not None:
-                 coverage_tensor = torch.tensor([cov_label], dtype=torch.float)
-        
-        # Pivot Features - now including side_id for team awareness
-        feature_cols = ["std_x", "std_y", "s", "a", "std_dir", "std_o", "weight_norm", "role_id", "side_id"]
-        feature_matrices = []
-        for col in feature_cols:
-            val_fill = 0
-            if col == "role_id": val_fill = 4
-            if col == "side_id": val_fill = 2  # Unknown side
-            if col not in pdf.columns:
-                # Create placeholder if column doesn't exist
-                pdf[col] = 0
-            pivot = pdf.pivot(index='frame_id', columns='nfl_id', values=col).fillna(val_fill)
-            feature_matrices.append(pivot.values)
-            
-        # [Frames, Agents, Feats] - now 9 features
-        data_tensor = np.stack(feature_matrices, axis=-1)
-        data_tensor = torch.FloatTensor(data_tensor)
-        
+                coverage_tensor = torch.tensor([cov_label], dtype=torch.float)
+
+        # Pivot base to track presence and ordering
+        pivot_x = pdf.pivot(index="frame_id", columns="nfl_id", values="std_x")
+        pivot_x = pivot_x.sort_index()
+        agent_ids = pivot_x.columns.to_numpy()
+        presence_mask = ~pivot_x.isna().to_numpy()
+        football_mask = agent_ids == 999999
+        presence_mask = presence_mask & (~football_mask[None, :])
+        pivot_x = pivot_x.fillna(0)
+
+        # Helper to pivot consistently
+        def _pivot(col: str, fill_value, dtype=float):
+            pivot = pdf.pivot(index="frame_id", columns="nfl_id", values=col)
+            pivot = pivot.reindex(index=pivot_x.index).fillna(fill_value)
+            return pivot.to_numpy(dtype=dtype)
+
+        pivots = {
+            "std_y": _pivot("std_y", 0.0),
+            "s": _pivot("s", 0.0),
+            "a": _pivot("a", 0.0),
+            "std_dir": _pivot("std_dir", 0.0),
+            "std_o": _pivot("std_o", 0.0),
+            "weight_norm": _pivot("weight_norm", 0.0),
+            "role_id": _pivot("role_id", 4),
+            "side_id": _pivot("side_id", 2),
+        }
+
+        x_mat = torch.tensor(pivot_x.to_numpy(), dtype=torch.float32)
+        y_mat = torch.tensor(pivots["std_y"], dtype=torch.float32)
+        speed_mat = torch.tensor(pivots["s"], dtype=torch.float32)
+        acc_mat = torch.tensor(pivots["a"], dtype=torch.float32)
+        dir_deg_mat = torch.tensor(pivots["std_dir"], dtype=torch.float32)
+        ori_deg_mat = torch.tensor(pivots["std_o"], dtype=torch.float32)
+        weight_mat = torch.tensor(pivots["weight_norm"], dtype=torch.float32)
+        role_mat = torch.tensor(pivots["role_id"], dtype=torch.long)
+        side_mat = torch.tensor(pivots["side_id"], dtype=torch.long)
+        valid_mask_mat = torch.tensor(presence_mask, dtype=torch.bool)
+
+        dir_sin, dir_cos = _normalize_angles_deg(dir_deg_mat)
+        ori_sin, ori_cos = _normalize_angles_deg(ori_deg_mat)
+
+        # [Frames, Agents, Features]
+        data_tensor = torch.stack(
+            [
+                x_mat,
+                y_mat,
+                speed_mat,
+                acc_mat,
+                dir_sin,
+                dir_cos,
+                ori_sin,
+                ori_cos,
+                weight_mat,
+            ],
+            dim=-1,
+        )
+
         num_frames = data_tensor.shape[0]
-        
-        # radius graph index helpers
-        # Iterate Frames - need history_len before and future_seq_len after
         min_start = history_len
         max_end = num_frames - future_seq_len
-        
+
         for t in range(min_start, max_end):
             x_t = data_tensor[t]  # [Agents, 9]
-            
-            # Extract Role and Side (Last 2 Cols)
-            role_t = x_t[:, 7].long()
-            side_t = x_t[:, 8].long()
-            
-            # Keep features up to weight (first 7)
-            # x, y, s, a, dir, o, weight
-            input_x = x_t[:, :7] 
-            pos_t = input_x[:, :2]  # x, y
-            speed_t = input_x[:, 2]  # speed
-            dir_t = input_x[:, 4]    # direction
-            
-            # Compute Motion History (P1) - velocity and acceleration from past positions
-            # history_positions: [history_len, Agents, 2]
+            role_t = role_mat[t]
+            side_t = side_mat[t]
+            valid_mask_t = valid_mask_mat[t]
+            dir_raw_t = dir_deg_mat[t]
+            ori_raw_t = ori_deg_mat[t]
+
+            input_x = x_t
+            pos_t = input_x[:, :2]
+            speed_t = input_x[:, 2]
+
             if history_len > 1:
-                history_positions = data_tensor[t-history_len:t, :, :2]  # [H, Agents, 2]
-                history_positions = history_positions.permute(1, 0, 2)   # [Agents, H, 2]
-                
-                # Compute velocity (position differences)
-                velocity = history_positions[:, 1:, :] - history_positions[:, :-1, :]  # [Agents, H-1, 2]
-                
-                # Compute acceleration (velocity differences)  
+                history_positions = data_tensor[t - history_len : t, :, :2]
+                history_positions = history_positions.permute(1, 0, 2)
+
+                velocity = history_positions[:, 1:, :] - history_positions[:, :-1, :]
+
                 if velocity.shape[1] > 1:
-                    acceleration = velocity[:, 1:, :] - velocity[:, :-1, :]  # [Agents, H-2, 2]
-                    # Pad acceleration to match velocity length
-                    acc_pad = torch.zeros(acceleration.shape[0], 1, 2)
+                    acceleration = velocity[:, 1:, :] - velocity[:, :-1, :]
+                    acc_pad = torch.zeros(
+                        acceleration.shape[0],
+                        1,
+                        2,
+                        device=acceleration.device,
+                        dtype=acceleration.dtype,
+                    )
                     acceleration = torch.cat([acc_pad, acceleration], dim=1)
                 else:
                     acceleration = torch.zeros_like(velocity)
-                
-                # Combine: [vel_x, vel_y, acc_x, acc_y] -> [Agents, H-1, 4]
+
                 history_t = torch.cat([velocity, acceleration], dim=-1)
             else:
                 history_t = None
-            
-            # Future Targets - RELATIVE to current position (critical for accuracy)
-            future_abs = data_tensor[t+1 : t+1+future_seq_len, :, :2]  # [T, Agents, 2]
-            future_abs = future_abs.permute(1, 0, 2)  # [Agents, T, 2]
-            
-            # Convert to relative displacements from current position
-            current_pos = pos_t.unsqueeze(1)  # [Agents, 1, 2]
-            y_t = future_abs - current_pos  # [Agents, T, 2] - relative displacements 
-            
-            # Edges with RICHER FEATURES
-            dist_matrix = torch.cdist(pos_t, pos_t)
-            mask = (dist_matrix < radius) & (dist_matrix > 1e-5)
-            edge_index = mask.nonzero().t()
-            
-            if edge_index.shape[1] > 0:
-                row_idx, col_idx = edge_index
-                
-                # 1. Distance (normalized by radius)
-                diff = pos_t[row_idx] - pos_t[col_idx]
-                dist = torch.norm(diff, p=2, dim=-1).view(-1, 1) / radius
-                
-                # 2. Relative Angle
-                angle = torch.atan2(diff[:, 1], diff[:, 0]).view(-1, 1)
-                
-                # 3. Relative Velocity (speed difference)
-                rel_speed = (speed_t[row_idx] - speed_t[col_idx]).view(-1, 1)
-                
-                # 4. Relative Direction (direction difference, normalized to [-1, 1])
-                dir_diff = ((dir_t[row_idx] - dir_t[col_idx] + 180) % 360 - 180) / 180.0
-                rel_dir = dir_diff.view(-1, 1)
-                
-                # 5. Same-Team Indicator (1 if same team, 0 otherwise)
-                same_team = (side_t[row_idx] == side_t[col_idx]).float().view(-1, 1)
-                
-                # Combine: [dist, angle, rel_speed, rel_dir, same_team] = 5D edge features
-                edge_attr = torch.cat([dist, angle, rel_speed, rel_dir, same_team], dim=-1)
-            else:
-                edge_attr = torch.zeros((0, 5))
-            
+
+            future_abs = data_tensor[t + 1 : t + 1 + future_seq_len, :, :2]
+            future_abs = future_abs.permute(1, 0, 2)
+
+            current_pos = pos_t.unsqueeze(1)
+            y_t = future_abs - current_pos
+
+            edge_index, edge_attr = build_edge_index_and_attr(
+                pos_t, speed_t, dir_raw_t, side_t, radius, valid_mask=valid_mask_t
+            )
+
             data = Data(x=input_x, edge_index=edge_index, edge_attr=edge_attr, y=y_t, pos=pos_t)
-            
-            # Store current position for converting predictions back to absolute
-            data.current_pos = pos_t  # [Agents, 2]
-            
-            # Add temporal encoding (normalized frame position)
+            data.current_pos = pos_t
             data.frame_t = torch.tensor([t / num_frames], dtype=torch.float)
-            
-            if role_t is not None: data.role = role_t
-            if side_t is not None: data.side = side_t
-            if formation_tensor is not None: data.formation = formation_tensor
-            if alignment_tensor is not None: data.alignment = alignment_tensor
-            if context_tensor is not None: data.context = context_tensor
-            # Always set y_coverage for consistent batching (-1.0 = unknown/missing)
+            data.valid_mask = valid_mask_t
+            data.dir_raw = dir_raw_t
+            data.ori_raw = ori_raw_t
+            data.edge_radius = torch.tensor(radius, dtype=torch.float)
+
+            if role_t is not None:
+                data.role = role_t
+            if side_t is not None:
+                data.side = side_t
+            if formation_tensor is not None:
+                data.formation = formation_tensor
+            if alignment_tensor is not None:
+                data.alignment = alignment_tensor
+            if context_tensor is not None:
+                data.context = context_tensor
+
             data.y_coverage = coverage_tensor if coverage_tensor is not None else torch.tensor([-1.0], dtype=torch.float)
-            if history_t is not None: data.history = history_t  # [Agents, H-1, 4]
-            
-            # Store play identifiers for train/val splitting
+            if history_t is not None:
+                data.history = history_t
+
             data.game_id = torch.tensor([game_id], dtype=torch.long)
             data.play_id = torch.tensor([play_id], dtype=torch.long)
-            
+
             graph_list.append(data)
-            
+
     return graph_list
 

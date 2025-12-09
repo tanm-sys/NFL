@@ -33,7 +33,7 @@ batch_size: 160            # Optimal for 6GB VRAM with bf16
 learning_rate: 0.0015      # Scaled for batch size
 max_epochs: 120
 min_epochs: 30
-num_workers: 4
+num_workers: 0  # Set to 0 to avoid multiprocessing deadlocks
 accumulate_grad_batches: 1
 
 # Optimization - WORLD-CLASS

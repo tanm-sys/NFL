@@ -30,7 +30,7 @@ batch_size: 16
 learning_rate: 0.001
 max_epochs: 5  # Very few epochs
 min_epochs: 1
-num_workers: 2
+num_workers: 0  # Set to 0 to avoid multiprocessing deadlocks
 accumulate_grad_batches: 1
 
 # Optimization

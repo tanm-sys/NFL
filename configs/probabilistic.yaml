@@ -30,7 +30,7 @@ batch_size: 24  # Slightly smaller due to GMM overhead
 learning_rate: 0.0008  # Slightly lower for stability
 max_epochs: 120
 min_epochs: 15
-num_workers: 4
+num_workers: 0  # Set to 0 to avoid multiprocessing deadlocks
 accumulate_grad_batches: 1
 
 # Optimization

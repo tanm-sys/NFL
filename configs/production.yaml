@@ -32,7 +32,7 @@ batch_size: 64
 learning_rate: 0.0005
 max_epochs: 100
 min_epochs: 20
-num_workers: 4
+num_workers: 0  # Set to 0 to avoid multiprocessing deadlocks
 accumulate_grad_batches: 2   # Effective batch = 128
 
 # Optimization (SOTA)

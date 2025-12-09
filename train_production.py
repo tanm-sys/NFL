@@ -103,6 +103,60 @@ USE_TORCH_COMPILE = False
 console = Console()
 
 
+def detect_optimal_precision() -> str:
+    """
+    Automatically detect the optimal precision based on GPU capabilities.
+    
+    Returns:
+        str: Optimal precision string ('bf16-mixed', '16-mixed', or '32')
+    
+    Precision selection logic:
+    - RTX 40 series (Ada Lovelace) / A100 / H100: bf16-mixed (best performance)
+    - RTX 30 series (Ampere): bf16-mixed (good performance)
+    - RTX 20 series (Turing) and older: 16-mixed (fp16) or 32 (fp32)
+    - CPU: 32 (fp32)
+    """
+    if not torch.cuda.is_available():
+        return "32"  # CPU: use fp32
+    
+    try:
+        # Get GPU compute capability
+        device = torch.cuda.current_device()
+        props = torch.cuda.get_device_properties(device)
+        gpu_name = props.name
+        
+        # Check compute capability (major, minor)
+        # Ampere (RTX 30/40, A100): 8.0+
+        # Ada Lovelace (RTX 40): 8.9
+        # Turing (RTX 20): 7.5
+        # Volta (V100): 7.0
+        compute_capability = props.major + props.minor / 10.0
+        
+        # Check if bf16 is supported (Ampere+ with compute capability >= 8.0)
+        if compute_capability >= 8.0:
+            # Verify bf16 support by checking if torch supports it
+            if hasattr(torch.cuda, 'is_bf16_supported') and torch.cuda.is_bf16_supported():
+                return "bf16-mixed"
+            # Fallback: try to create a bf16 tensor to test support
+            try:
+                test_tensor = torch.tensor([1.0], dtype=torch.bfloat16, device='cuda')
+                del test_tensor
+                return "bf16-mixed"
+            except (RuntimeError, TypeError):
+                pass
+        
+        # For older GPUs (Turing, Pascal, etc.), use fp16 if available
+        if compute_capability >= 7.0:
+            return "16-mixed"  # fp16 mixed precision
+        
+        # Very old GPUs or fallback
+        return "32"  # fp32 full precision
+        
+    except Exception as e:
+        logger.warning(f"Could not detect optimal precision: {e}. Defaulting to 16-mixed")
+        return "16-mixed"
+
+
 class ProductionConfig:
     """Production training configuration with validation."""
     
@@ -155,7 +209,14 @@ class ProductionConfig:
         self.label_smoothing = kwargs.get('label_smoothing', 0.0)
         
         # Hardware
-        self.precision = kwargs.get('precision', '16-mixed')
+        precision_input = kwargs.get('precision', 'auto')
+        if precision_input == 'auto' or precision_input is None:
+            self.precision = detect_optimal_precision()
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0)
+                logger.info(f"Auto-detected precision: {self.precision} for GPU: {gpu_name}")
+        else:
+            self.precision = precision_input
         self.accelerator = kwargs.get('accelerator', 'auto')
         self.devices = kwargs.get('devices', 'auto')
         self.strategy = kwargs.get('strategy', 'auto')
@@ -998,9 +1059,9 @@ def main():
                        help='Learning rate')
     parser.add_argument('--max-epochs', type=int, default=100,
                        help='Maximum epochs')
-    parser.add_argument('--precision', type=str, default='16-mixed',
-                       choices=['32', '16-mixed', 'bf16-mixed'],
-                       help='Training precision')
+    parser.add_argument('--precision', type=str, default='auto',
+                       choices=['auto', '32', '16-mixed', 'bf16-mixed'],
+                       help='Training precision (auto=detect based on GPU, 32=fp32, 16-mixed=fp16, bf16-mixed=bfloat16)')
     parser.add_argument('--num-workers', type=int, default=None,
                        help='Dataloader worker count (overrides config)')
     parser.add_argument('--limit-train-batches', type=float, default=None,

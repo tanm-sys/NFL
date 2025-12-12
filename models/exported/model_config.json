@@ -1,0 +1,22 @@
+{
+  "input_dim": 9,
+  "hidden_dim": 256,
+  "lr": 0.0015,
+  "future_seq_len": 10,
+  "probabilistic": false,
+  "num_modes": 6,
+  "velocity_weight": 0.4,
+  "acceleration_weight": 0.2,
+  "coverage_weight": 0.5,
+  "collision_weight": 0.08,
+  "use_augmentation": true,
+  "use_huber_loss": true,
+  "huber_delta": 1.0,
+  "weight_decay": 0.05,
+  "optimizer_type": "adamw",
+  "warmup_epochs": 5,
+  "label_smoothing": 0.05,
+  "miss_threshold": 2.5,
+  "checkpoint_source": "checkpoints/nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+  "parameters": 6327940
+}

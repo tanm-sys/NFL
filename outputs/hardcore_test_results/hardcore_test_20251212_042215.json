@@ -1,0 +1,374 @@
+{
+  "device": "cuda",
+  "gpu_name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+  "test_timestamp": "2025-12-12 04:22:09",
+  "checkpoints": {
+    "nfl_worldclass-epoch=03-val_ade=0.582.ckpt": {
+      "epoch": 3,
+      "val_ade_reported": 0.582,
+      "weeks": {},
+      "aggregate_ade": [],
+      "aggregate_fde": [],
+      "batch_size_test": null,
+      "stability_test": null
+    },
+    "nfl_worldclass-epoch=04-val_ade=0.545.ckpt": {
+      "epoch": 4,
+      "val_ade_reported": 0.545,
+      "weeks": {},
+      "aggregate_ade": [],
+      "aggregate_fde": [],
+      "batch_size_test": null,
+      "stability_test": null
+    },
+    "nfl_worldclass-epoch=05-val_ade=0.567.ckpt": {
+      "epoch": 5,
+      "val_ade_reported": 0.567,
+      "weeks": {},
+      "aggregate_ade": [],
+      "aggregate_fde": [],
+      "batch_size_test": null,
+      "stability_test": null
+    },
+    "nfl_worldclass-epoch=11-val_ade=0.659.ckpt": {
+      "epoch": 11,
+      "val_ade_reported": 0.659,
+      "weeks": {},
+      "aggregate_ade": [],
+      "aggregate_fde": [],
+      "batch_size_test": null,
+      "stability_test": null
+    },
+    "nfl_worldclass-epoch=12-val_ade=0.645.ckpt": {
+      "epoch": 12,
+      "val_ade_reported": 0.645,
+      "weeks": {},
+      "aggregate_ade": [],
+      "aggregate_fde": [],
+      "batch_size_test": null,
+      "stability_test": null
+    },
+    "nfl_worldclass-epoch=13-val_ade=0.647.ckpt": {
+      "epoch": 13,
+      "val_ade_reported": 0.647,
+      "weeks": {},
+      "aggregate_ade": [],
+      "aggregate_fde": [],
+      "batch_size_test": null,
+      "stability_test": null
+    },
+    "nfl_worldclass-epoch=14-val_ade=0.640.ckpt": {
+      "epoch": 14,
+      "val_ade_reported": 0.64,
+      "weeks": {},
+      "aggregate_ade": [],
+      "aggregate_fde": [],
+      "batch_size_test": null,
+      "stability_test": null
+    },
+    "last.ckpt": {
+      "epoch": 0,
+      "val_ade_reported": 0.0,
+      "weeks": {},
+      "aggregate_ade": [],
+      "aggregate_fde": [],
+      "batch_size_test": null,
+      "stability_test": null
+    }
+  },
+  "week_summaries": {},
+  "overall_best": {
+    "checkpoint": null,
+    "ade": Infinity
+  },
+  "issues_found": [
+    {
+      "checkpoint": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+      "week": 1,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+      "week": 5,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+      "week": 9,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+      "week": 13,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+      "week": 17,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+      "week": 18,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+      "week": 1,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+      "week": 5,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+      "week": 9,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+      "week": 13,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+      "week": 17,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+      "week": 18,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+      "week": 1,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+      "week": 5,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+      "week": 9,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+      "week": 13,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+      "week": 17,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+      "week": 18,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+      "week": 1,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+      "week": 5,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+      "week": 9,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+      "week": 13,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+      "week": 17,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+      "week": 18,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+      "week": 1,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+      "week": 5,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+      "week": 9,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+      "week": 13,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+      "week": 17,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+      "week": 18,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+      "week": 1,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+      "week": 5,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+      "week": 9,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+      "week": 13,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+      "week": 17,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+      "week": 18,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+      "week": 1,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+      "week": 5,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+      "week": 9,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+      "week": 13,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+      "week": 17,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+      "week": 18,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "last.ckpt",
+      "week": 1,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "last.ckpt",
+      "week": 5,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "last.ckpt",
+      "week": 9,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "last.ckpt",
+      "week": 13,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "last.ckpt",
+      "week": 17,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    },
+    {
+      "checkpoint": "last.ckpt",
+      "week": 18,
+      "issue": "graph_creation_failed",
+      "error": "'weight_norm'"
+    }
+  ]
+}

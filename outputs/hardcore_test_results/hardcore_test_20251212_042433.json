@@ -1,0 +1,1949 @@
+{
+  "device": "cuda",
+  "gpu_name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+  "test_timestamp": "2025-12-12 04:23:17",
+  "checkpoints": {
+    "nfl_worldclass-epoch=03-val_ade=0.582.ckpt": {
+      "epoch": 3,
+      "val_ade_reported": 0.582,
+      "weeks": {
+        "1": {
+          "checkpoint_name": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+          "epoch": 3,
+          "val_ade_reported": 0.582,
+          "ade_mean": 0.5842399559726873,
+          "ade_std": 0.31759991347646804,
+          "fde_mean": 1.1336530318794458,
+          "fde_std": 0.7347211880855333,
+          "ade_per_step": [
+            0.2504957785431198,
+            0.2893986121199184,
+            0.33346300731931056,
+            0.3900325166403709,
+            0.4643438174482538,
+            0.555273734209825,
+            0.6671131445981283,
+            0.7990016659372945,
+            0.9596241453376554,
+            1.1336530318794458
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.13365091626546605,
+          "gpu_memory_mb": 137.7001953125,
+          "numerical_issues": 0,
+          "total_samples": 8116,
+          "total_predictions": 162320
+        },
+        "5": {
+          "checkpoint_name": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+          "epoch": 3,
+          "val_ade_reported": 0.582,
+          "ade_mean": 0.5871464232632411,
+          "ade_std": 0.4266961969711419,
+          "fde_mean": 1.116346898584302,
+          "fde_std": 0.8928511487548928,
+          "ade_per_step": [
+            0.2632654630909069,
+            0.30194133016446073,
+            0.343935728805062,
+            0.3981884083240623,
+            0.4715412638242275,
+            0.5596688509011709,
+            0.6704974212688116,
+            0.7959750645684022,
+            0.9501037034238804,
+            1.116346898584302
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07258370812453031,
+          "gpu_memory_mb": 137.7001953125,
+          "numerical_issues": 0,
+          "total_samples": 8826,
+          "total_predictions": 176520
+        },
+        "9": {
+          "checkpoint_name": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+          "epoch": 3,
+          "val_ade_reported": 0.582,
+          "ade_mean": 0.5846758214928367,
+          "ade_std": 0.31049470779515626,
+          "fde_mean": 1.1122103895763045,
+          "fde_std": 0.705805090447206,
+          "ade_per_step": [
+            0.2647565604286485,
+            0.30173369866914057,
+            0.3405181424196908,
+            0.3959373650174001,
+            0.46934775693355524,
+            0.5580193046694534,
+            0.6671712906243547,
+            0.7912225865067535,
+            0.9458410233618826,
+            1.1122103895763045
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06968621175919296,
+          "gpu_memory_mb": 137.7001953125,
+          "numerical_issues": 0,
+          "total_samples": 8199,
+          "total_predictions": 163980
+        },
+        "13": {
+          "checkpoint_name": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+          "epoch": 3,
+          "val_ade_reported": 0.582,
+          "ade_mean": 0.5834101944762081,
+          "ade_std": 0.36779227540918596,
+          "fde_mean": 1.1169894992046787,
+          "fde_std": 0.7806316871427159,
+          "ade_per_step": [
+            0.249880835154767,
+            0.2916847058481388,
+            0.33801377645627956,
+            0.39586653692571816,
+            0.47030823108301045,
+            0.5603523648001663,
+            0.6694976141628229,
+            0.7938736444674808,
+            0.9476346350340064,
+            1.1169894992046787
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06791059770919483,
+          "gpu_memory_mb": 137.7001953125,
+          "numerical_issues": 0,
+          "total_samples": 8872,
+          "total_predictions": 177440
+        },
+        "17": {
+          "checkpoint_name": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+          "epoch": 3,
+          "val_ade_reported": 0.582,
+          "ade_mean": 0.5845943988841046,
+          "ade_std": 0.358196785889147,
+          "fde_mean": 1.1189115785438972,
+          "fde_std": 0.7878043601244125,
+          "ade_per_step": [
+            0.2601216553302651,
+            0.29679315305490234,
+            0.33788524639277,
+            0.39347190092631407,
+            0.4695490857525268,
+            0.5569971739670506,
+            0.6680951017005157,
+            0.7938680090434411,
+            0.9502509856471036,
+            1.1189115785438972
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06746923765518857,
+          "gpu_memory_mb": 138.9970703125,
+          "numerical_issues": 0,
+          "total_samples": 7848,
+          "total_predictions": 156960
+        },
+        "18": {
+          "checkpoint_name": "nfl_worldclass-epoch=03-val_ade=0.582.ckpt",
+          "epoch": 3,
+          "val_ade_reported": 0.582,
+          "ade_mean": 0.5884056751076507,
+          "ade_std": 0.3139844616647404,
+          "fde_mean": 1.1403980041508792,
+          "fde_std": 0.7151935741789125,
+          "ade_per_step": [
+            0.24257296446543586,
+            0.2875542714228543,
+            0.3350892118000026,
+            0.3945146999816467,
+            0.4714635458186074,
+            0.5634756300234227,
+            0.6761346825489256,
+            0.8067720550288638,
+            0.9660815893861846,
+            1.1403980041508792
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07033409918622203,
+          "gpu_memory_mb": 138.9970703125,
+          "numerical_issues": 0,
+          "total_samples": 8097,
+          "total_predictions": 161940
+        }
+      },
+      "aggregate_ade": [
+        0.5842399559726873,
+        0.5871464232632411,
+        0.5846758214928367,
+        0.5834101944762081,
+        0.5845943988841046,
+        0.5884056751076507
+      ],
+      "aggregate_fde": [
+        1.1336530318794458,
+        1.116346898584302,
+        1.1122103895763045,
+        1.1169894992046787,
+        1.1189115785438972,
+        1.1403980041508792
+      ],
+      "batch_size_test": {
+        "1": {
+          "time_ms": 8.421182632446289,
+          "success": true,
+          "error": null
+        },
+        "8": {
+          "time_ms": 11.55543327331543,
+          "success": true,
+          "error": null
+        },
+        "16": {
+          "time_ms": 14.564752578735352,
+          "success": true,
+          "error": null
+        },
+        "32": {
+          "time_ms": 23.93341064453125,
+          "success": true,
+          "error": null
+        },
+        "64": {
+          "time_ms": 40.85278511047363,
+          "success": true,
+          "error": null
+        },
+        "128": {
+          "time_ms": 76.92360877990723,
+          "success": true,
+          "error": null
+        }
+      },
+      "stability_test": {
+        "gradient_overflow": false,
+        "activation_explosion": false,
+        "weight_issues": 0,
+        "deterministic": true
+      },
+      "overall_ade": 0.5854120781994547,
+      "overall_fde": 1.1230849003232513
+    },
+    "nfl_worldclass-epoch=04-val_ade=0.545.ckpt": {
+      "epoch": 4,
+      "val_ade_reported": 0.545,
+      "weeks": {
+        "1": {
+          "checkpoint_name": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+          "epoch": 4,
+          "val_ade_reported": 0.545,
+          "ade_mean": 0.5529830440154607,
+          "ade_std": 0.33228601851442974,
+          "fde_mean": 1.0475720489681786,
+          "fde_std": 0.7403172287386567,
+          "ade_per_step": [
+            0.28124965144169445,
+            0.3034165452644238,
+            0.34227682718233843,
+            0.38669356174402036,
+            0.42822769606896094,
+            0.5066380572513732,
+            0.6128440873722085,
+            0.7365891809955976,
+            0.8843226886495088,
+            1.0475720489681786
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06869014983779653,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 8168,
+          "total_predictions": 163360
+        },
+        "5": {
+          "checkpoint_name": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+          "epoch": 4,
+          "val_ade_reported": 0.545,
+          "ade_mean": 0.5428088753337149,
+          "ade_std": 0.31614771159399535,
+          "fde_mean": 1.0438342527340725,
+          "fde_std": 0.7159995746697759,
+          "ade_per_step": [
+            0.275383396075904,
+            0.2951934347812028,
+            0.3311348811536356,
+            0.3737601123315161,
+            0.4154179985835201,
+            0.49123692425848153,
+            0.5984500222492305,
+            0.7268838076224698,
+            0.8767938265330476,
+            1.0438342527340725
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07037850506244263,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 9431,
+          "total_predictions": 188620
+        },
+        "9": {
+          "checkpoint_name": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+          "epoch": 4,
+          "val_ade_reported": 0.545,
+          "ade_mean": 0.5123392704115752,
+          "ade_std": 0.2730710199503248,
+          "fde_mean": 0.9752963445175603,
+          "fde_std": 0.6316176875235437,
+          "ade_per_step": [
+            0.2672132714704008,
+            0.28395486260887587,
+            0.31934175950639415,
+            0.3594418290904478,
+            0.39642546416506874,
+            0.4639030701849671,
+            0.5621484547593036,
+            0.6791716764540922,
+            0.8164958892012355,
+            0.9752963445175603
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06928372928146857,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 9405,
+          "total_predictions": 188100
+        },
+        "13": {
+          "checkpoint_name": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+          "epoch": 4,
+          "val_ade_reported": 0.545,
+          "ade_mean": 0.5487723109518011,
+          "ade_std": 0.29587072841774403,
+          "fde_mean": 1.0451223609258207,
+          "fde_std": 0.688774837798579,
+          "ade_per_step": [
+            0.28126628488143973,
+            0.3048355734577745,
+            0.34271040802424657,
+            0.3856501261238076,
+            0.42480847290975654,
+            0.4969146774597796,
+            0.6004900235341902,
+            0.7277270138541331,
+            0.8781980733330863,
+            1.0451223609258207
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06941077984708521,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 6897,
+          "total_predictions": 137940
+        },
+        "17": {
+          "checkpoint_name": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+          "epoch": 4,
+          "val_ade_reported": 0.545,
+          "ade_mean": 0.5329950032107166,
+          "ade_std": 0.29016682724250786,
+          "fde_mean": 1.024097959477149,
+          "fde_std": 0.6761065798280952,
+          "ade_per_step": [
+            0.26965308193676174,
+            0.2898466810957208,
+            0.3265466363690488,
+            0.36930756895805966,
+            0.4102064697805365,
+            0.48277865163785727,
+            0.5866594169599111,
+            0.7111709872100686,
+            0.8596824893482395,
+            1.024097959477149
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07252418017778241,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 7625,
+          "total_predictions": 152500
+        },
+        "18": {
+          "checkpoint_name": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+          "epoch": 4,
+          "val_ade_reported": 0.545,
+          "ade_mean": 0.5516815917873624,
+          "ade_std": 0.37914651202045635,
+          "fde_mean": 1.053991047087954,
+          "fde_std": 0.8149106858134129,
+          "ade_per_step": [
+            0.2772042030170514,
+            0.29764544833748435,
+            0.33645721796002404,
+            0.38266797387589324,
+            0.42696231372259297,
+            0.5045609911575406,
+            0.6106975012179635,
+            0.7388911482779815,
+            0.8877379844937608,
+            1.053991047087954
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06752689508921086,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 8155,
+          "total_predictions": 163100
+        }
+      },
+      "aggregate_ade": [
+        0.5529830440154607,
+        0.5428088753337149,
+        0.5123392704115752,
+        0.5487723109518011,
+        0.5329950032107166,
+        0.5516815917873624
+      ],
+      "aggregate_fde": [
+        1.0475720489681786,
+        1.0438342527340725,
+        0.9752963445175603,
+        1.0451223609258207,
+        1.024097959477149,
+        1.053991047087954
+      ],
+      "batch_size_test": {
+        "1": {
+          "time_ms": 7.501125335693359,
+          "success": true,
+          "error": null
+        },
+        "8": {
+          "time_ms": 9.280204772949219,
+          "success": true,
+          "error": null
+        },
+        "16": {
+          "time_ms": 12.733936309814453,
+          "success": true,
+          "error": null
+        },
+        "32": {
+          "time_ms": 20.94864845275879,
+          "success": true,
+          "error": null
+        },
+        "64": {
+          "time_ms": 39.86215591430664,
+          "success": true,
+          "error": null
+        },
+        "128": {
+          "time_ms": 75.17409324645996,
+          "success": true,
+          "error": null
+        }
+      },
+      "stability_test": {
+        "gradient_overflow": false,
+        "activation_explosion": false,
+        "weight_issues": 0,
+        "deterministic": true
+      },
+      "overall_ade": 0.5402633492851052,
+      "overall_fde": 1.0316523356184557
+    },
+    "nfl_worldclass-epoch=05-val_ade=0.567.ckpt": {
+      "epoch": 5,
+      "val_ade_reported": 0.567,
+      "weeks": {
+        "1": {
+          "checkpoint_name": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+          "epoch": 5,
+          "val_ade_reported": 0.567,
+          "ade_mean": 0.5782397778455078,
+          "ade_std": 0.29385831582647715,
+          "fde_mean": 1.1082679134257116,
+          "fde_std": 0.6890771547495651,
+          "ade_per_step": [
+            0.2784617338240205,
+            0.3081385907556221,
+            0.35780636573321767,
+            0.40072678462179484,
+            0.45203097360575883,
+            0.5294515748377764,
+            0.6393904199791571,
+            0.7743259379899025,
+            0.9337973839820759,
+            1.1082679134257116
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07051473195801751,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 7557,
+          "total_predictions": 151140
+        },
+        "5": {
+          "checkpoint_name": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+          "epoch": 5,
+          "val_ade_reported": 0.567,
+          "ade_mean": 0.5720054664888377,
+          "ade_std": 0.3000675617732569,
+          "fde_mean": 1.0703440337649703,
+          "fde_std": 0.6968932552405129,
+          "ade_per_step": [
+            0.28710615747270163,
+            0.32022063066116724,
+            0.3706719544103125,
+            0.4099912829388978,
+            0.45586228677455554,
+            0.5257152441242456,
+            0.6247476250179056,
+            0.7527540182204112,
+            0.9026413267000679,
+            1.0703440337649703
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06975928361937035,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 7873,
+          "total_predictions": 157460
+        },
+        "9": {
+          "checkpoint_name": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+          "epoch": 5,
+          "val_ade_reported": 0.567,
+          "ade_mean": 0.5517807680660302,
+          "ade_std": 0.28103547467322865,
+          "fde_mean": 1.025637732030011,
+          "fde_std": 0.6539377651016007,
+          "ade_per_step": [
+            0.28311731520313704,
+            0.310951727203884,
+            0.35849460282193374,
+            0.39812409394155046,
+            0.43896404587494087,
+            0.5060813926922676,
+            0.6035847441714475,
+            0.7237739032400049,
+            0.8690780364424374,
+            1.025637732030011
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06953111628896182,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 7275,
+          "total_predictions": 145500
+        },
+        "13": {
+          "checkpoint_name": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+          "epoch": 5,
+          "val_ade_reported": 0.567,
+          "ade_mean": 0.5619809229115519,
+          "ade_std": 0.2919796047469924,
+          "fde_mean": 1.0839798062011468,
+          "fde_std": 0.6830609768847913,
+          "ade_per_step": [
+            0.26280458936648887,
+            0.293320754640165,
+            0.3461692790234364,
+            0.3885593264406575,
+            0.43822101572538125,
+            0.5145086035330492,
+            0.6219012695371621,
+            0.7565242087237282,
+            0.9138202828078095,
+            1.0839798062011468
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07327689400202111,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 8690,
+          "total_predictions": 173800
+        },
+        "17": {
+          "checkpoint_name": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+          "epoch": 5,
+          "val_ade_reported": 0.567,
+          "ade_mean": 0.5874262243191364,
+          "ade_std": 0.3014417918761204,
+          "fde_mean": 1.1126371720996477,
+          "fde_std": 0.6869324955334797,
+          "ade_per_step": [
+            0.28426013328801863,
+            0.3162235114357351,
+            0.36838709347945525,
+            0.4121422829255047,
+            0.4620242925569871,
+            0.5414221658037586,
+            0.6490839018340328,
+            0.7849015017335,
+            0.9431800903756334,
+            1.1126371720996477
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06817626820424492,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 8624,
+          "total_predictions": 172480
+        },
+        "18": {
+          "checkpoint_name": "nfl_worldclass-epoch=05-val_ade=0.567.ckpt",
+          "epoch": 5,
+          "val_ade_reported": 0.567,
+          "ade_mean": 0.5580588979317037,
+          "ade_std": 0.2976669170311681,
+          "fde_mean": 1.0541668295759796,
+          "fde_std": 0.6812132262485691,
+          "ade_per_step": [
+            0.27616060538730997,
+            0.30676120720804323,
+            0.3566744495662329,
+            0.39399479566892165,
+            0.4397077823365388,
+            0.5120828459244993,
+            0.6122289420081561,
+            0.7381577915688474,
+            0.8906536374921201,
+            1.0541668295759796
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06927468695933726,
+          "gpu_memory_mb": 361.6943359375,
+          "numerical_issues": 0,
+          "total_samples": 7970,
+          "total_predictions": 159400
+        }
+      },
+      "aggregate_ade": [
+        0.5782397778455078,
+        0.5720054664888377,
+        0.5517807680660302,
+        0.5619809229115519,
+        0.5874262243191364,
+        0.5580588979317037
+      ],
+      "aggregate_fde": [
+        1.1082679134257116,
+        1.0703440337649703,
+        1.025637732030011,
+        1.0839798062011468,
+        1.1126371720996477,
+        1.0541668295759796
+      ],
+      "batch_size_test": {
+        "1": {
+          "time_ms": 7.5817108154296875,
+          "success": true,
+          "error": null
+        },
+        "8": {
+          "time_ms": 9.461641311645508,
+          "success": true,
+          "error": null
+        },
+        "16": {
+          "time_ms": 13.173818588256836,
+          "success": true,
+          "error": null
+        },
+        "32": {
+          "time_ms": 22.87149429321289,
+          "success": true,
+          "error": null
+        },
+        "64": {
+          "time_ms": 40.70878028869629,
+          "success": true,
+          "error": null
+        },
+        "128": {
+          "time_ms": 80.16562461853027,
+          "success": true,
+          "error": null
+        }
+      },
+      "stability_test": {
+        "gradient_overflow": false,
+        "activation_explosion": false,
+        "weight_issues": 0,
+        "deterministic": true
+      },
+      "overall_ade": 0.5682486762604613,
+      "overall_fde": 1.0758389145162446
+    },
+    "nfl_worldclass-epoch=11-val_ade=0.659.ckpt": {
+      "epoch": 11,
+      "val_ade_reported": 0.659,
+      "weeks": {
+        "1": {
+          "checkpoint_name": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+          "epoch": 11,
+          "val_ade_reported": 0.659,
+          "ade_mean": 0.6621067871354955,
+          "ade_std": 0.38271593641144547,
+          "fde_mean": 1.1248566353028573,
+          "fde_std": 0.7539491207839509,
+          "ade_per_step": [
+            0.43418697761568115,
+            0.4560436713186273,
+            0.4693737518487568,
+            0.4961662610268156,
+            0.5359389484938311,
+            0.6048076837424685,
+            0.7051908682039363,
+            0.8273731223068503,
+            0.9671298404551388,
+            1.1248566353028573
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07166729834741223,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8016,
+          "total_predictions": 160320
+        },
+        "5": {
+          "checkpoint_name": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+          "epoch": 11,
+          "val_ade_reported": 0.659,
+          "ade_mean": 0.686978074603277,
+          "ade_std": 0.44477936016607184,
+          "fde_mean": 1.1738397368758513,
+          "fde_std": 0.8573910233314992,
+          "ade_per_step": [
+            0.44304108683953486,
+            0.46667024209887176,
+            0.48201605136723646,
+            0.5106888854584407,
+            0.556352758327412,
+            0.6306059723271913,
+            0.7355421891293193,
+            0.8627876520983838,
+            1.0082360513034192,
+            1.1738397368758513
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06867085393582281,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 10175,
+          "total_predictions": 203500
+        },
+        "9": {
+          "checkpoint_name": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+          "epoch": 11,
+          "val_ade_reported": 0.659,
+          "ade_mean": 0.676292433493779,
+          "ade_std": 0.3828264199054763,
+          "fde_mean": 1.1362204519457955,
+          "fde_std": 0.7541975981197444,
+          "ade_per_step": [
+            0.4529873235956136,
+            0.4741194645057349,
+            0.4857273589065995,
+            0.5116254827724176,
+            0.5509974930141395,
+            0.6188681150660432,
+            0.7173187888416622,
+            0.8377904950783129,
+            0.977269241348969,
+            1.1362204519457955
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06997228739788464,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8793,
+          "total_predictions": 175860
+        },
+        "13": {
+          "checkpoint_name": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+          "epoch": 11,
+          "val_ade_reported": 0.659,
+          "ade_mean": 0.6620188658795049,
+          "ade_std": 0.35077752571448856,
+          "fde_mean": 1.1317465226606978,
+          "fde_std": 0.7113862862458793,
+          "ade_per_step": [
+            0.43524331804431016,
+            0.4552017827497855,
+            0.4668338954088188,
+            0.4916327793061613,
+            0.5315736528660261,
+            0.6026794520709062,
+            0.7050374074748927,
+            0.8289806375551608,
+            0.9712590873050353,
+            1.1317465226606978
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06960318165440713,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7750,
+          "total_predictions": 155000
+        },
+        "17": {
+          "checkpoint_name": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+          "epoch": 11,
+          "val_ade_reported": 0.659,
+          "ade_mean": 0.6721567002006363,
+          "ade_std": 0.4206307152468425,
+          "fde_mean": 1.1150343537784466,
+          "fde_std": 0.811568192072947,
+          "ade_per_step": [
+            0.45981693899074016,
+            0.479292623277555,
+            0.49017684326386946,
+            0.5134716614144683,
+            0.5498443675764989,
+            0.6143396354884416,
+            0.7103434532611401,
+            0.8269056855756867,
+            0.9623413223881687,
+            1.1150343537784466
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06876064078946958,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7523,
+          "total_predictions": 150460
+        },
+        "18": {
+          "checkpoint_name": "nfl_worldclass-epoch=11-val_ade=0.659.ckpt",
+          "epoch": 11,
+          "val_ade_reported": 0.659,
+          "ade_mean": 0.6240394516515667,
+          "ade_std": 0.3262193735642356,
+          "fde_mean": 1.0529449709238494,
+          "fde_std": 0.6451368828356129,
+          "ade_per_step": [
+            0.4222941635324383,
+            0.44072658279015114,
+            0.44938395389372043,
+            0.468926829880513,
+            0.5031991149547743,
+            0.5661223531619218,
+            0.6595007888353104,
+            0.7730086741407908,
+            0.9042869802169942,
+            1.0529449709238494
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07103914214481381,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8101,
+          "total_predictions": 162020
+        }
+      },
+      "aggregate_ade": [
+        0.6621067871354955,
+        0.686978074603277,
+        0.676292433493779,
+        0.6620188658795049,
+        0.6721567002006363,
+        0.6240394516515667
+      ],
+      "aggregate_fde": [
+        1.1248566353028573,
+        1.1738397368758513,
+        1.1362204519457955,
+        1.1317465226606978,
+        1.1150343537784466,
+        1.0529449709238494
+      ],
+      "batch_size_test": {
+        "1": {
+          "time_ms": 8.093118667602539,
+          "success": true,
+          "error": null
+        },
+        "8": {
+          "time_ms": 10.167360305786133,
+          "success": true,
+          "error": null
+        },
+        "16": {
+          "time_ms": 14.595985412597656,
+          "success": true,
+          "error": null
+        },
+        "32": {
+          "time_ms": 21.04353904724121,
+          "success": true,
+          "error": null
+        },
+        "64": {
+          "time_ms": 40.18902778625488,
+          "success": true,
+          "error": null
+        },
+        "128": {
+          "time_ms": 75.18696784973145,
+          "success": true,
+          "error": null
+        }
+      },
+      "stability_test": {
+        "gradient_overflow": false,
+        "activation_explosion": false,
+        "weight_issues": 0,
+        "deterministic": true
+      },
+      "overall_ade": 0.6639320521607098,
+      "overall_fde": 1.1224404452479162
+    },
+    "nfl_worldclass-epoch=12-val_ade=0.645.ckpt": {
+      "epoch": 12,
+      "val_ade_reported": 0.645,
+      "weeks": {
+        "1": {
+          "checkpoint_name": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+          "epoch": 12,
+          "val_ade_reported": 0.645,
+          "ade_mean": 0.6462202888924438,
+          "ade_std": 0.36346565176268,
+          "fde_mean": 1.09992791320738,
+          "fde_std": 0.7111934059751983,
+          "ade_per_step": [
+            0.4186324497309805,
+            0.44128928765331715,
+            0.45289961913158705,
+            0.4805704427995325,
+            0.5277000992947659,
+            0.5977914444960625,
+            0.691384352228957,
+            0.806443044242875,
+            0.9455641220670699,
+            1.09992791320738
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06978671172655738,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7630,
+          "total_predictions": 152600
+        },
+        "5": {
+          "checkpoint_name": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+          "epoch": 12,
+          "val_ade_reported": 0.645,
+          "ade_mean": 0.6190681232387729,
+          "ade_std": 0.34516748011650766,
+          "fde_mean": 1.0444753256568546,
+          "fde_std": 0.6721880936267208,
+          "ade_per_step": [
+            0.4082439124309113,
+            0.428474550274945,
+            0.43958222901117067,
+            0.46399584745194544,
+            0.5072806645188447,
+            0.5727142718797885,
+            0.659953700336012,
+            0.7674675740548393,
+            0.8984930538798286,
+            1.0444753256568546
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.0723999179880005,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 9461,
+          "total_predictions": 189220
+        },
+        "9": {
+          "checkpoint_name": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+          "epoch": 12,
+          "val_ade_reported": 0.645,
+          "ade_mean": 0.6687536705802969,
+          "ade_std": 0.38057012524629913,
+          "fde_mean": 1.1212363534160108,
+          "fde_std": 0.7363539660039863,
+          "ade_per_step": [
+            0.44717321727354375,
+            0.468948620845068,
+            0.4787851891940848,
+            0.5041357874582584,
+            0.5489773598804067,
+            0.617539067337435,
+            0.7104959326249688,
+            0.8253589760716346,
+            0.9648860749155376,
+            1.1212363534160108
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06763426305046744,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8060,
+          "total_predictions": 161200
+        },
+        "13": {
+          "checkpoint_name": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+          "epoch": 12,
+          "val_ade_reported": 0.645,
+          "ade_mean": 0.6419740194125941,
+          "ade_std": 0.3533153946280267,
+          "fde_mean": 1.0938676351539884,
+          "fde_std": 0.6900076914853444,
+          "ade_per_step": [
+            0.42009180173225735,
+            0.4397340525567735,
+            0.4518531800427044,
+            0.47859283628011695,
+            0.5231577112261258,
+            0.5913095587574139,
+            0.6843764715671643,
+            0.7987688589731925,
+            0.937987978620173,
+            1.0938676351539884
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07006049870968183,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7505,
+          "total_predictions": 150100
+        },
+        "17": {
+          "checkpoint_name": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+          "epoch": 12,
+          "val_ade_reported": 0.645,
+          "ade_mean": 0.6352954499655281,
+          "ade_std": 0.3428721485114657,
+          "fde_mean": 1.0712379206048408,
+          "fde_std": 0.6601697682033133,
+          "ade_per_step": [
+            0.4187357222319453,
+            0.43908469956911916,
+            0.45100080491320205,
+            0.4775895667649097,
+            0.521535712266457,
+            0.5878535857313356,
+            0.6770698915730778,
+            0.7875498769779564,
+            0.921296610653669,
+            1.0712379206048408
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07070073105136515,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7297,
+          "total_predictions": 145940
+        },
+        "18": {
+          "checkpoint_name": "nfl_worldclass-epoch=12-val_ade=0.645.ckpt",
+          "epoch": 12,
+          "val_ade_reported": 0.645,
+          "ade_mean": 0.6422178299998528,
+          "ade_std": 0.3562747197258786,
+          "fde_mean": 1.0875386359611787,
+          "fde_std": 0.704569840015508,
+          "ade_per_step": [
+            0.41855835284573195,
+            0.44183760818604806,
+            0.4551053638415523,
+            0.48106208665814404,
+            0.5256329862252462,
+            0.5935352085048424,
+            0.6856009094297416,
+            0.798653334885707,
+            0.9346537027106121,
+            1.0875386359611787
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06917992951144755,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8048,
+          "total_predictions": 160960
+        }
+      },
+      "aggregate_ade": [
+        0.6462202888924438,
+        0.6190681232387729,
+        0.6687536705802969,
+        0.6419740194125941,
+        0.6352954499655281,
+        0.6422178299998528
+      ],
+      "aggregate_fde": [
+        1.09992791320738,
+        1.0444753256568546,
+        1.1212363534160108,
+        1.0938676351539884,
+        1.0712379206048408,
+        1.0875386359611787
+      ],
+      "batch_size_test": {
+        "1": {
+          "time_ms": 8.61668586730957,
+          "success": true,
+          "error": null
+        },
+        "8": {
+          "time_ms": 13.049125671386719,
+          "success": true,
+          "error": null
+        },
+        "16": {
+          "time_ms": 14.94598388671875,
+          "success": true,
+          "error": null
+        },
+        "32": {
+          "time_ms": 24.672985076904297,
+          "success": true,
+          "error": null
+        },
+        "64": {
+          "time_ms": 43.122291564941406,
+          "success": true,
+          "error": null
+        },
+        "128": {
+          "time_ms": 75.44374465942383,
+          "success": true,
+          "error": null
+        }
+      },
+      "stability_test": {
+        "gradient_overflow": false,
+        "activation_explosion": false,
+        "weight_issues": 0,
+        "deterministic": true
+      },
+      "overall_ade": 0.6422548970149148,
+      "overall_fde": 1.086380630666709
+    },
+    "nfl_worldclass-epoch=13-val_ade=0.647.ckpt": {
+      "epoch": 13,
+      "val_ade_reported": 0.647,
+      "weeks": {
+        "1": {
+          "checkpoint_name": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+          "epoch": 13,
+          "val_ade_reported": 0.647,
+          "ade_mean": 0.6248485775684316,
+          "ade_std": 0.34273248712827575,
+          "fde_mean": 1.0433161311372259,
+          "fde_std": 0.6667401940904907,
+          "ade_per_step": [
+            0.425595696925475,
+            0.43888899321892455,
+            0.4534509758631931,
+            0.47432757706521617,
+            0.5121667889492673,
+            0.5755324373417138,
+            0.6610530310403697,
+            0.7677823175897548,
+            0.8963717117024221,
+            1.0433161311372259
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.0721497092489424,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7219,
+          "total_predictions": 144380
+        },
+        "5": {
+          "checkpoint_name": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+          "epoch": 13,
+          "val_ade_reported": 0.647,
+          "ade_mean": 0.6787654450051371,
+          "ade_std": 0.3746530773853357,
+          "fde_mean": 1.127265779387102,
+          "fde_std": 0.7329085519525504,
+          "ade_per_step": [
+            0.46659192197258015,
+            0.4797656201691462,
+            0.49512905918024247,
+            0.5176086816676077,
+            0.5574270143740502,
+            0.6248000676678522,
+            0.7166854571935724,
+            0.8322430587108982,
+            0.9701376687950417,
+            1.127265779387102
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06758731216099978,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8075,
+          "total_predictions": 161500
+        },
+        "9": {
+          "checkpoint_name": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+          "epoch": 13,
+          "val_ade_reported": 0.647,
+          "ade_mean": 0.6754738747855091,
+          "ade_std": 0.40004570801566286,
+          "fde_mean": 1.1302592826818063,
+          "fde_std": 0.7820193017238399,
+          "ade_per_step": [
+            0.45610010202753987,
+            0.4687198216927572,
+            0.4852052782881101,
+            0.5103613298105395,
+            0.5536321849568424,
+            0.6240940211751194,
+            0.7181637061588793,
+            0.8348959477784956,
+            0.9733069619531678,
+            1.1302592826818063
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06797544000887883,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8116,
+          "total_predictions": 162320
+        },
+        "13": {
+          "checkpoint_name": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+          "epoch": 13,
+          "val_ade_reported": 0.647,
+          "ade_mean": 0.6478205022050515,
+          "ade_std": 0.34722876670491654,
+          "fde_mean": 1.0939090324190626,
+          "fde_std": 0.683401800689941,
+          "ade_per_step": [
+            0.43257076185448945,
+            0.44632815104003853,
+            0.4628050398689541,
+            0.4864576409722964,
+            0.5285934591228189,
+            0.5975877610595984,
+            0.6886654737817037,
+            0.8027335512049814,
+            0.9385540424298336,
+            1.0939090324190626
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06854439865338373,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8977,
+          "total_predictions": 179540
+        },
+        "17": {
+          "checkpoint_name": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+          "epoch": 13,
+          "val_ade_reported": 0.647,
+          "ade_mean": 0.6461021727165048,
+          "ade_std": 0.3639558849157342,
+          "fde_mean": 1.0697220471104179,
+          "fde_std": 0.7018741566814153,
+          "ade_per_step": [
+            0.44551021953375747,
+            0.4574538073016389,
+            0.47286172781347524,
+            0.4939748055664167,
+            0.5319646243816881,
+            0.595813809569669,
+            0.6824496771711542,
+            0.7906582284522765,
+            0.9206126672556055,
+            1.0697220471104179
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06889720482529586,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7362,
+          "total_predictions": 147240
+        },
+        "18": {
+          "checkpoint_name": "nfl_worldclass-epoch=13-val_ade=0.647.ckpt",
+          "epoch": 13,
+          "val_ade_reported": 0.647,
+          "ade_mean": 0.6378920247731159,
+          "ade_std": 0.35287403774729226,
+          "fde_mean": 1.086703822120676,
+          "fde_std": 0.6917267833139767,
+          "ade_per_step": [
+            0.4231502634870258,
+            0.4365972374971705,
+            0.45335553851589655,
+            0.47597062391421724,
+            0.5172270776919691,
+            0.5851154831624644,
+            0.6780765734494397,
+            0.7928426259131255,
+            0.9298808889578355,
+            1.086703822120676
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07208189370488201,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7982,
+          "total_predictions": 159640
+        }
+      },
+      "aggregate_ade": [
+        0.6248485775684316,
+        0.6787654450051371,
+        0.6754738747855091,
+        0.6478205022050515,
+        0.6461021727165048,
+        0.6378920247731159
+      ],
+      "aggregate_fde": [
+        1.0433161311372259,
+        1.127265779387102,
+        1.1302592826818063,
+        1.0939090324190626,
+        1.0697220471104179,
+        1.086703822120676
+      ],
+      "batch_size_test": {
+        "1": {
+          "time_ms": 7.97724723815918,
+          "success": true,
+          "error": null
+        },
+        "8": {
+          "time_ms": 10.100126266479492,
+          "success": true,
+          "error": null
+        },
+        "16": {
+          "time_ms": 14.493703842163086,
+          "success": true,
+          "error": null
+        },
+        "32": {
+          "time_ms": 22.87125587463379,
+          "success": true,
+          "error": null
+        },
+        "64": {
+          "time_ms": 39.559125900268555,
+          "success": true,
+          "error": null
+        },
+        "128": {
+          "time_ms": 81.26115798950195,
+          "success": true,
+          "error": null
+        }
+      },
+      "stability_test": {
+        "gradient_overflow": false,
+        "activation_explosion": false,
+        "weight_issues": 0,
+        "deterministic": true
+      },
+      "overall_ade": 0.6518170995089584,
+      "overall_fde": 1.0918626824760482
+    },
+    "nfl_worldclass-epoch=14-val_ade=0.640.ckpt": {
+      "epoch": 14,
+      "val_ade_reported": 0.64,
+      "weeks": {
+        "1": {
+          "checkpoint_name": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+          "epoch": 14,
+          "val_ade_reported": 0.64,
+          "ade_mean": 0.6336273709511098,
+          "ade_std": 0.33260298368245506,
+          "fde_mean": 1.0404682475847233,
+          "fde_std": 0.6469852021065501,
+          "ade_per_step": [
+            0.4458301328340647,
+            0.4577250262100984,
+            0.4696429896341948,
+            0.48895950306834923,
+            0.5222643272652974,
+            0.5815315427521897,
+            0.6635894532881363,
+            0.7696410284635089,
+            0.8966213510025304,
+            1.0404682475847233
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06845511107667378,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7347,
+          "total_predictions": 146940
+        },
+        "5": {
+          "checkpoint_name": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+          "epoch": 14,
+          "val_ade_reported": 0.64,
+          "ade_mean": 0.6475671462034954,
+          "ade_std": 0.34589717184007207,
+          "fde_mean": 1.0766028155670833,
+          "fde_std": 0.6701414784344655,
+          "ade_per_step": [
+            0.4437691636601701,
+            0.45844547548750664,
+            0.47266041476590853,
+            0.49528699020902817,
+            0.5320805686377997,
+            0.5958978858101058,
+            0.6826937974714019,
+            0.7928208341555623,
+            0.9254134053851162,
+            1.0766028155670833
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06859101850611803,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8495,
+          "total_predictions": 169900
+        },
+        "9": {
+          "checkpoint_name": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+          "epoch": 14,
+          "val_ade_reported": 0.64,
+          "ade_mean": 0.6569135085515809,
+          "ade_std": 0.4038948063416161,
+          "fde_mean": 1.1141850000229674,
+          "fde_std": 0.7579444239718599,
+          "ade_per_step": [
+            0.43109306054372176,
+            0.44856810939790676,
+            0.4662425407683007,
+            0.49304480314398674,
+            0.5371116936056847,
+            0.6057420037035093,
+            0.6995649567083723,
+            0.8169794097013624,
+            0.9566033986472436,
+            1.1141850000229674
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06906860328737828,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7688,
+          "total_predictions": 153760
+        },
+        "13": {
+          "checkpoint_name": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+          "epoch": 14,
+          "val_ade_reported": 0.64,
+          "ade_mean": 0.6124534016751414,
+          "ade_std": 0.33190665889581045,
+          "fde_mean": 1.029629927223709,
+          "fde_std": 0.6562551003570329,
+          "ade_per_step": [
+            0.4188813153725733,
+            0.43032377560043156,
+            0.44212087069199874,
+            0.4632353822574653,
+            0.49913343940771915,
+            0.5601799441001439,
+            0.6450204426279635,
+            0.7531028359092443,
+            0.8829059805780589,
+            1.029629927223709
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.0693625799992453,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8055,
+          "total_predictions": 161100
+        },
+        "17": {
+          "checkpoint_name": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+          "epoch": 14,
+          "val_ade_reported": 0.64,
+          "ade_mean": 0.6676644403552799,
+          "ade_std": 0.3819784137560325,
+          "fde_mean": 1.1302947023411964,
+          "fde_std": 0.7476080065579449,
+          "ade_per_step": [
+            0.44485761599253715,
+            0.4597142077049936,
+            0.4757455382898758,
+            0.5004263445770574,
+            0.5432803313252528,
+            0.6134654550961357,
+            0.709051392313191,
+            0.8290498123882061,
+            0.9707588900985864,
+            1.1302947023411964
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07030841401943885,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7980,
+          "total_predictions": 159600
+        },
+        "18": {
+          "checkpoint_name": "nfl_worldclass-epoch=14-val_ade=0.640.ckpt",
+          "epoch": 14,
+          "val_ade_reported": 0.64,
+          "ade_mean": 0.6424413215193339,
+          "ade_std": 0.34947556820788633,
+          "fde_mean": 1.0582997055589252,
+          "fde_std": 0.6730022742093799,
+          "ade_per_step": [
+            0.45208680364496634,
+            0.46296166739800787,
+            0.47426019721454105,
+            0.4937301669307813,
+            0.527965157692282,
+            0.5892813692586385,
+            0.6734714744841801,
+            0.7814078323430999,
+            0.9109487283541011,
+            1.0582997055589252
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07183372261321185,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7105,
+          "total_predictions": 142100
+        }
+      },
+      "aggregate_ade": [
+        0.6336273709511098,
+        0.6475671462034954,
+        0.6569135085515809,
+        0.6124534016751414,
+        0.6676644403552799,
+        0.6424413215193339
+      ],
+      "aggregate_fde": [
+        1.0404682475847233,
+        1.0766028155670833,
+        1.1141850000229674,
+        1.029629927223709,
+        1.1302947023411964,
+        1.0582997055589252
+      ],
+      "batch_size_test": {
+        "1": {
+          "time_ms": 8.402347564697266,
+          "success": true,
+          "error": null
+        },
+        "8": {
+          "time_ms": 9.720325469970703,
+          "success": true,
+          "error": null
+        },
+        "16": {
+          "time_ms": 12.732505798339844,
+          "success": true,
+          "error": null
+        },
+        "32": {
+          "time_ms": 21.627187728881836,
+          "success": true,
+          "error": null
+        },
+        "64": {
+          "time_ms": 40.085554122924805,
+          "success": true,
+          "error": null
+        },
+        "128": {
+          "time_ms": 74.40185546875,
+          "success": true,
+          "error": null
+        }
+      },
+      "stability_test": {
+        "gradient_overflow": false,
+        "activation_explosion": false,
+        "weight_issues": 0,
+        "deterministic": true
+      },
+      "overall_ade": 0.6434445315426568,
+      "overall_fde": 1.074913399716434
+    },
+    "last.ckpt": {
+      "epoch": 0,
+      "val_ade_reported": 0.0,
+      "weeks": {
+        "1": {
+          "checkpoint_name": "last.ckpt",
+          "epoch": 0,
+          "val_ade_reported": 0.0,
+          "ade_mean": 0.6591112467912691,
+          "ade_std": 0.37613514752452126,
+          "fde_mean": 1.1318425039249145,
+          "fde_std": 0.7525781514379778,
+          "ade_per_step": [
+            0.43516780941644323,
+            0.45012881838250907,
+            0.4649178376819261,
+            0.48897185865638465,
+            0.5316001972173304,
+            0.6026806608736273,
+            0.6992367699402445,
+            0.8207852292131911,
+            0.965780671962549,
+            1.1318425039249145
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06707779772869953,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7700,
+          "total_predictions": 154000
+        },
+        "5": {
+          "checkpoint_name": "last.ckpt",
+          "epoch": 0,
+          "val_ade_reported": 0.0,
+          "ade_mean": 0.6334504822804228,
+          "ade_std": 0.35379516912313774,
+          "fde_mean": 1.0452151013320132,
+          "fde_std": 0.6655110609895992,
+          "ade_per_step": [
+            0.4435336921184706,
+            0.4539503375326723,
+            0.4661270108531014,
+            0.48568955982435114,
+            0.5203742276989988,
+            0.5812761640383687,
+            0.6654501660407456,
+            0.7724096114804581,
+            0.9004788397116277,
+            1.0452151013320132
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07032642596046552,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7908,
+          "total_predictions": 158160
+        },
+        "9": {
+          "checkpoint_name": "last.ckpt",
+          "epoch": 0,
+          "val_ade_reported": 0.0,
+          "ade_mean": 0.6489592783291862,
+          "ade_std": 0.3692198836094838,
+          "fde_mean": 1.1030464430502975,
+          "fde_std": 0.7240739665448358,
+          "ade_per_step": [
+            0.43505012291323397,
+            0.4476273035659034,
+            0.4617513025380264,
+            0.4855796183336371,
+            0.5261420858791711,
+            0.5944121651613288,
+            0.6872542525861628,
+            0.8046826122712104,
+            0.9440467652390739,
+            1.1030464430502975
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.07084994973539334,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7971,
+          "total_predictions": 159420
+        },
+        "13": {
+          "checkpoint_name": "last.ckpt",
+          "epoch": 0,
+          "val_ade_reported": 0.0,
+          "ade_mean": 0.644927137143846,
+          "ade_std": 0.3578167913796674,
+          "fde_mean": 1.11504776781972,
+          "fde_std": 0.7112668930088647,
+          "ade_per_step": [
+            0.4204026513539387,
+            0.43461255459732795,
+            0.45045320010955364,
+            0.47618843657255466,
+            0.5191690096679412,
+            0.5903883220067752,
+            0.685862528727378,
+            0.806222173383131,
+            0.9509246197240242,
+            1.11504776781972
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.0706001136348102,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 8501,
+          "total_predictions": 170020
+        },
+        "17": {
+          "checkpoint_name": "last.ckpt",
+          "epoch": 0,
+          "val_ade_reported": 0.0,
+          "ade_mean": 0.629074630855284,
+          "ade_std": 0.4073970658356933,
+          "fde_mean": 1.0456197060640593,
+          "fde_std": 0.7632340854347307,
+          "ade_per_step": [
+            0.4264220231124715,
+            0.44298089274021163,
+            0.4587564033921986,
+            0.48022064153572874,
+            0.5174168256266722,
+            0.5805040749325853,
+            0.6657838361091516,
+            0.7726034233935256,
+            0.900438369766263,
+            1.0456197060640593
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06847298991040901,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7851,
+          "total_predictions": 157020
+        },
+        "18": {
+          "checkpoint_name": "last.ckpt",
+          "epoch": 0,
+          "val_ade_reported": 0.0,
+          "ade_mean": 0.6632145189876266,
+          "ade_std": 0.34486911469983883,
+          "fde_mean": 1.099936908335791,
+          "fde_std": 0.6659764599376193,
+          "ade_per_step": [
+            0.4626733139022456,
+            0.4743416982052079,
+            0.4862839509607503,
+            0.5073267607246895,
+            0.5436414317181918,
+            0.607504620746823,
+            0.6956985249473138,
+            0.8095329859075769,
+            0.9452048791709776,
+            1.099936908335791
+          ],
+          "nan_predictions": 0,
+          "inf_predictions": 0,
+          "out_of_bounds": 0,
+          "extreme_predictions": 0,
+          "inference_time_ms": 0.06879518151060562,
+          "gpu_memory_mb": 377.1689453125,
+          "numerical_issues": 0,
+          "total_samples": 7494,
+          "total_predictions": 149880
+        }
+      },
+      "aggregate_ade": [
+        0.6591112467912691,
+        0.6334504822804228,
+        0.6489592783291862,
+        0.644927137143846,
+        0.629074630855284,
+        0.6632145189876266
+      ],
+      "aggregate_fde": [
+        1.1318425039249145,
+        1.0452151013320132,
+        1.1030464430502975,
+        1.11504776781972,
+        1.0456197060640593,
+        1.099936908335791
+      ],
+      "batch_size_test": {
+        "1": {
+          "time_ms": 8.869171142578125,
+          "success": true,
+          "error": null
+        },
+        "8": {
+          "time_ms": 10.204076766967773,
+          "success": true,
+          "error": null
+        },
+        "16": {
+          "time_ms": 13.420343399047852,
+          "success": true,
+          "error": null
+        },
+        "32": {
+          "time_ms": 22.09782600402832,
+          "success": true,
+          "error": null
+        },
+        "64": {
+          "time_ms": 39.670705795288086,
+          "success": true,
+          "error": null
+        },
+        "128": {
+          "time_ms": 73.82512092590332,
+          "success": true,
+          "error": null
+        }
+      },
+      "stability_test": {
+        "gradient_overflow": false,
+        "activation_explosion": false,
+        "weight_issues": 0,
+        "deterministic": true
+      },
+      "overall_ade": 0.6464562157312724,
+      "overall_fde": 1.090118071754466
+    }
+  },
+  "week_summaries": {},
+  "overall_best": {
+    "checkpoint": "nfl_worldclass-epoch=04-val_ade=0.545.ckpt",
+    "ade": 0.5402633492851052
+  },
+  "issues_found": []
+}

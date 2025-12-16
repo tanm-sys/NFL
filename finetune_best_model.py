@@ -19,6 +19,8 @@ sys.path.insert(0, 'src')
 sys.path.insert(0, '.')
 
 import json
+import yaml
+import argparse
 import torch
 # Enable Tensor Cores for maximum GPU performance
 torch.set_float32_matmul_precision('medium')
@@ -266,6 +268,31 @@ def finetune():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Fine-tune NFL model")
+    parser.add_argument("--config", type=str, default=None, 
+                        help="Path to YAML config file (e.g. configs/max_accuracy_rtx3050.yaml)")
+    args = parser.parse_args()
+    
+    # Load config from YAML if provided
+    if args.config:
+        console.print(f"[cyan]Loading config from: {args.config}[/cyan]")
+        with open(args.config, 'r') as f:
+            yaml_config = yaml.safe_load(f)
+        
+        # Override FINETUNE_CONFIG with YAML values
+        FINETUNE_CONFIG.update({
+            "lr": yaml_config.get("learning_rate", FINETUNE_CONFIG["lr"]),
+            "weight_decay": yaml_config.get("weight_decay", FINETUNE_CONFIG["weight_decay"]),
+            "max_epochs": yaml_config.get("max_epochs", FINETUNE_CONFIG["max_epochs"]),
+            "batch_size": yaml_config.get("batch_size", FINETUNE_CONFIG["batch_size"]),
+            "accumulate_grad_batches": yaml_config.get("accumulate_grad_batches", FINETUNE_CONFIG["accumulate_grad_batches"]),
+            "early_stopping_patience": yaml_config.get("early_stopping_patience", FINETUNE_CONFIG["early_stopping_patience"]),
+            "weeks": yaml_config.get("weeks", FINETUNE_CONFIG["weeks"]),
+            "hidden_dim": yaml_config.get("hidden_dim", FINETUNE_CONFIG["hidden_dim"]),
+            "num_modes": yaml_config.get("num_modes", FINETUNE_CONFIG["num_modes"]),
+        })
+        console.print(f"[green]✓ Config loaded successfully![/green]")
+    
     try:
         best_path, best_ade = finetune()
     except KeyboardInterrupt:

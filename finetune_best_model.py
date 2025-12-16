@@ -47,20 +47,20 @@ BEST_CHECKPOINT = "checkpoints/nfl_worldclass-epoch=04-val_ade=0.545.ckpt"
 OUTPUT_DIR = Path("checkpoints_finetuned")
 CACHE_DIR = Path("cache/finetune")
 
-# Fine-tuning hyperparameters - MAXIMUM ACCURACY for RTX 3050 4GB
+# Fine-tuning hyperparameters - MAXIMUM SPEED for RTX 3050 4GB
 FINETUNE_CONFIG = {
-    "lr": 0.001,                # Higher for Lion optimizer
+    "lr": 0.001,
     "weight_decay": 0.02,
-    "max_epochs": 50,           # More epochs for convergence
-    "batch_size": 24,           # Reduced for larger model
-    "accumulate_grad_batches": 6,  # Effective batch = 144
+    "max_epochs": 50,
+    "batch_size": 48,           # INCREASED for GPU utilization
+    "accumulate_grad_batches": 3,  # Effective batch = 144
     "early_stopping_patience": 10,
-    "weeks": list(range(1, 19)),  # All 18 weeks
+    "weeks": list(range(1, 10)),  # First 9 weeks for faster iteration
     # Model architecture
     "hidden_dim": 256,
-    "num_gnn_layers": 8,        # Deep network
-    "heads": 8,                 # Max attention heads
-    "num_modes": 8,             # More trajectory diversity
+    "num_gnn_layers": 6,        # Reduced for speed
+    "heads": 8,
+    "num_modes": 6,             # Reduced for speed
 }
 
 
@@ -85,7 +85,7 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
     
     console.print(f"[green]Train samples: {len(train_tuples)}, Val samples: {len(val_tuples)}[/green]")
     
-    # Create datasets
+    # Create datasets with MAXIMUM caching for speed
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     
     train_dataset = GraphDataset(
@@ -96,7 +96,7 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
         history_len=history_len,
         cache_dir=CACHE_DIR / "train",
         persist_cache=True,
-        in_memory_cache_size=16,
+        in_memory_cache_size=100,  # LARGE cache for speed
     )
     
     val_dataset = GraphDataset(
@@ -107,14 +107,14 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
         history_len=history_len,
         cache_dir=CACHE_DIR / "val",
         persist_cache=True,
-        in_memory_cache_size=16,
+        in_memory_cache_size=50,  # LARGE cache for speed
     )
     
     train_loader = PyGDataLoader(
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0,  # Reduced to avoid startup delay
+        num_workers=2,  # Balanced: faster training, minimal startup
         pin_memory=True,
     )
     
@@ -122,7 +122,7 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=0,  # Reduced to avoid startup delay
+        num_workers=2,
         pin_memory=True,
     )
     

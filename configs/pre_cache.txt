@@ -1,0 +1,19 @@
+python -c "
+from src.data_loader import DataLoader, GraphDataset, build_play_metadata, expand_play_tuples
+from pathlib import Path
+
+print('Pre-caching all graphs...')
+loader = DataLoader('.')
+play_meta = build_play_metadata(loader, list(range(1,19)), 5, 10)
+tuples = expand_play_tuples(play_meta)
+
+cache_dir = Path('cache/finetune/train')
+cache_dir.mkdir(parents=True, exist_ok=True)
+
+ds = GraphDataset(loader, tuples, 20.0, 10, 5, cache_dir=cache_dir, persist_cache=True)
+for i in range(len(ds)):
+    _ = ds[i]
+    if i % 1000 == 0:
+        print(f'{i}/{len(ds)}')
+print('Done!')
+"

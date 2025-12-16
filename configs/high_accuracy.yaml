@@ -54,6 +54,28 @@ acceleration_weight: 0.2          # Physics-aware
 collision_weight: 0.08            # Player separation
 coverage_weight: 0.5
 
+# SOTA Contrastive Losses (NEW - 2024 techniques)
+use_social_nce: true              # Social NCE for collision avoidance
+social_nce_weight: 0.1
+social_nce_temperature: 0.1
+
+use_contrastive_loss: true        # TrajCLIP-style history-future alignment
+contrastive_weight: 0.05
+
+use_wta_loss: true                # Winner-Takes-All for multi-modal
+wta_k_best: 1
+
+use_diversity_loss: true          # Prevent mode collapse
+diversity_weight: 0.02
+diversity_min_distance: 2.0
+
+use_endpoint_focal: true          # Focal loss on final positions
+endpoint_focal_weight: 0.2
+endpoint_focal_gamma: 2.0
+
+# Temporal Encoder (NEW - Mamba for efficiency)
+temporal_encoder_type: "hybrid"   # "lstm", "mamba", "bimamba", "hybrid"
+
 # Regularization - ANTI-OVERFITTING
 gradient_clip_val: 1.0
 use_augmentation: true
@@ -62,10 +84,12 @@ huber_delta: 1.0
 label_smoothing: 0.1       # Prevents overconfidence
 
 # Hardware - Auto-detected for maximum utilization
-precision: "auto"  # Auto-detects: bf16-mixed (RTX 30/40, A100), 16-mixed (RTX 20), 32 (CPU/old GPUs)
+precision: "16-mixed"  # Mixed precision for Tensor Cores
 accelerator: "gpu"
 devices: 1
 strategy: "auto"
+use_torch_compile: true           # torch.compile for 2x speedup
+torch_compile_mode: "reduce-overhead"
 
 # Callbacks - BALANCED
 early_stopping_patience: 20
@@ -107,3 +131,4 @@ target_val_ade: 0.40       # Sub-0.5 yard accuracy
 target_val_fde: 0.70
 target_val_miss_rate: 0.05
 target_val_cov_acc: 0.95
+

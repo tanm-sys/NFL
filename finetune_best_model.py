@@ -20,6 +20,8 @@ sys.path.insert(0, '.')
 
 import json
 import torch
+# Enable Tensor Cores for maximum GPU performance
+torch.set_float32_matmul_precision('medium')
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import (
     EarlyStopping,
@@ -140,18 +142,21 @@ def finetune():
     # Setup output directory
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
-    # Load base model
+    # Load base model (strict=False for backward compat with old checkpoints)
     console.print("\n[yellow]Loading base checkpoint...[/yellow]")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
+    # Load with strict=False to allow loading old checkpoints without SOTA losses
     model = NFLGraphPredictor.load_from_checkpoint(
         BEST_CHECKPOINT,
         map_location=device,
+        strict=False,  # Allow missing keys for new SOTA loss layers
         lr=FINETUNE_CONFIG["lr"],
         weight_decay=FINETUNE_CONFIG["weight_decay"],
     )
     
     console.print(f"[green]✓ Model loaded: {sum(p.numel() for p in model.parameters()):,} parameters[/green]")
+    console.print("[cyan]  Note: New SOTA loss layers initialized with random weights[/cyan]")
     
     # Create dataloaders
     train_loader, val_loader = create_dataloaders(
@@ -199,14 +204,10 @@ def finetune():
         deterministic=False,  # Non-deterministic for max speed
     )
     
-    # torch.compile for 2x speedup (PyTorch 2.0+)
-    if torch.cuda.is_available() and hasattr(torch, 'compile'):
-        try:
-            console.print("[yellow]⚡ Compiling model with torch.compile...[/yellow]")
-            model.model = torch.compile(model.model, mode="reduce-overhead")
-            console.print("[green]✅ Model compiled for maximum performance![/green]")
-        except Exception as e:
-            console.print(f"[yellow]⚠️ torch.compile failed: {e}[/yellow]")
+    # NOTE: torch.compile disabled for fine-tuning - causes long warmup on first batch
+    # Enable only for long training runs where compile overhead is amortized
+    # if torch.cuda.is_available() and hasattr(torch, 'compile'):
+    #     model.model = torch.compile(model.model, mode="default")
     
     console.print("\n[bold green]Starting fine-tuning...[/bold green]\n")
     

@@ -1,4 +1,6 @@
 import torch
+# Enable Tensor Cores for maximum GPU performance
+torch.set_float32_matmul_precision('medium')
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger

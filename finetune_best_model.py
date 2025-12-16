@@ -47,20 +47,20 @@ BEST_CHECKPOINT = "checkpoints/nfl_worldclass-epoch=04-val_ade=0.545.ckpt"
 OUTPUT_DIR = Path("checkpoints_finetuned")
 CACHE_DIR = Path("cache/finetune")
 
-# Fine-tuning hyperparameters - MAXIMUM SPEED for RTX 3050 4GB
+# Fine-tuning hyperparameters - ULTIMATE ACCURACY for lowest ADE/FDE
 FINETUNE_CONFIG = {
-    "lr": 0.001,
-    "weight_decay": 0.02,
-    "max_epochs": 50,
-    "batch_size": 48,           # INCREASED for GPU utilization
-    "accumulate_grad_batches": 3,  # Effective batch = 144
-    "early_stopping_patience": 10,
-    "weeks": list(range(1, 19)),  # ALL 18 weeks for maximum accuracy
-    # Model architecture
+    "lr": 0.0008,               # Lower for stability
+    "weight_decay": 0.03,
+    "max_epochs": 100,          # Long training
+    "batch_size": 32,           # Smaller for better gradients
+    "accumulate_grad_batches": 5,  # Effective batch = 160
+    "early_stopping_patience": 20,
+    "weeks": list(range(1, 19)),  # ALL 18 weeks
+    # Model architecture - MAXIMUM
     "hidden_dim": 256,
-    "num_gnn_layers": 6,        # Reduced for speed
+    "num_gnn_layers": 8,        # Deep network
     "heads": 8,
-    "num_modes": 6,             # Reduced for speed
+    "num_modes": 8,             # More modes for lower minADE
 }
 
 

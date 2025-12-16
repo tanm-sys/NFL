@@ -1,96 +1,132 @@
 # ============================================================================
-# 🚀 MAXIMUM SPEED CONFIG - RTX 3050 4GB OPTIMIZED
+# 🏆 ULTIMATE ACCURACY CONFIG - LOWEST ADE/FDE for RTX 3050 4GB
 # ============================================================================
-# Fastest training while maintaining good accuracy.
-# Optimized for RTX 3050 4GB VRAM.
+# Optimized for competition-winning accuracy. Every setting tuned for
+# trajectory prediction quality over training speed.
 
-experiment_name: "nfl_max_speed"
-description: "Maximum speed training for RTX 3050 4GB"
+experiment_name: "nfl_ultimate_accuracy"
+description: "Maximum accuracy for lowest ADE/FDE - competition grade"
 
-# Data Configuration
+# Data - ALL DATA
 data_dir: "."
-weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]  # ALL weeks
-train_split: 0.8
-val_split: 0.2
+weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 radius: 20.0
 future_seq_len: 10
 history_len: 5
 
-# Model Architecture - BALANCED
+# ============================================================================
+# MODEL ARCHITECTURE - OPTIMIZED FOR ACCURACY
+# ============================================================================
 input_dim: 9
-hidden_dim: 256
-num_gnn_layers: 6              # Reduced for speed
-heads: 8
-dropout: 0.1
-droppath_rate: 0.1
-probabilistic: true
-num_modes: 6                   # Reduced for speed
-use_scene_encoder: true
-temporal_encoder_type: "lstm"  # Faster than hybrid
+hidden_dim: 256            # Maximum for 4GB VRAM
+num_gnn_layers: 8          # Deep network captures complex interactions
+heads: 8                   # Multi-head attention
+dropout: 0.10              # Moderate dropout
+droppath_rate: 0.12        # Stochastic depth
 
-# Training - SPEED OPTIMIZED
-batch_size: 48                 # Large for GPU utilization
-accumulate_grad_batches: 3     # Effective batch = 144
-learning_rate: 0.001
-max_epochs: 50
-min_epochs: 10
+# Probabilistic Decoder - KEY FOR LOW minADE/minFDE
+probabilistic: true
+num_modes: 8               # More modes = better multi-modal prediction
+                           # Critical for minADE metric
+
+# Advanced Encoders
+use_scene_encoder: true
+temporal_encoder_type: "hybrid"  # LSTM + Attention = best temporal modeling
+
+# ============================================================================
+# TRAINING - LONGER & MORE CAREFUL
+# ============================================================================
+batch_size: 32             # Smaller batch for better gradients
+accumulate_grad_batches: 5  # Effective batch = 160
+learning_rate: 0.0008      # Lower LR for stability
+max_epochs: 100            # Long training for convergence
+min_epochs: 30
 
 # Optimizer
 optimizer: "adamw"
-weight_decay: 0.02
+weight_decay: 0.03         # Strong regularization
 betas: [0.9, 0.999]
 
-# LR Scheduler
+# LR Scheduler - Cosine with long warmup
 lr_scheduler: "cosine_warmup"
-warmup_epochs: 3
-min_lr: 1.0e-06
+warmup_epochs: 8
+min_lr: 1.0e-07
 
-# Loss Weights
-trajectory_weight: 1.0
-velocity_weight: 0.3
-acceleration_weight: 0.15
-collision_weight: 0.05
-coverage_weight: 0.4
+# ============================================================================
+# LOSS WEIGHTS - TUNED FOR LOW ADE/FDE
+# ============================================================================
+# Primary trajectory losses
+trajectory_weight: 1.0     # Main MSE loss
+velocity_weight: 0.5       # Smooth trajectories
+acceleration_weight: 0.3   # Physically plausible motion
+collision_weight: 0.15     # Avoid collisions
+coverage_weight: 0.6       # Zone coverage accuracy
 
-# SOTA Losses
-use_social_nce: true
-social_nce_weight: 0.1
-use_wta_loss: true
-wta_k_best: 1
-use_diversity_loss: true
-diversity_weight: 0.02
-use_endpoint_focal: true
-endpoint_focal_weight: 0.15
+# ============================================================================
+# SOTA CONTRASTIVE LOSSES - ALL ENABLED
+# ============================================================================
+use_social_nce: true       # Learn social interactions
+social_nce_weight: 0.15
+social_nce_temperature: 0.07
 
-# Regularization
-gradient_clip_val: 1.0
-use_augmentation: true
-use_huber_loss: true
-huber_delta: 1.0
-label_smoothing: 0.05
+use_contrastive_loss: true
+contrastive_weight: 0.1
 
-# Hardware
+use_wta_loss: true         # Winner-takes-all for multi-modal
+wta_k_best: 2              # Top-2 modes (better diversity)
+
+use_diversity_loss: true   # Diverse trajectory predictions
+diversity_weight: 0.04
+diversity_min_distance: 2.0
+
+use_endpoint_focal: true   # Focus on hard endpoints
+endpoint_focal_weight: 0.25
+endpoint_focal_gamma: 2.5
+
+# ============================================================================
+# REGULARIZATION - STRONG BUT BALANCED
+# ============================================================================
+gradient_clip_val: 0.5     # Tight gradient clipping
+use_augmentation: true     # Data augmentation
+use_huber_loss: true       # Robust to outliers
+huber_delta: 0.8
+label_smoothing: 0.08
+
+# ============================================================================
+# HARDWARE
+# ============================================================================
 precision: "16-mixed"
 accelerator: "gpu"
 devices: 1
 benchmark: true
 deterministic: false
-num_workers: 0
+num_workers: 0             # Use pre-cached graphs
 
-# Caching - MAXIMUM
-in_memory_cache_size: 100
+# Caching
+in_memory_cache_size: 200  # Large RAM cache
 persist_cache: true
+cache_dir: "cache/finetune/train"
 
-# Callbacks
-early_stopping_patience: 8
-monitor_metric: "val_ade"
-save_top_k: 3
+# ============================================================================
+# CALLBACKS - COMPREHENSIVE MONITORING
+# ============================================================================
+early_stopping_patience: 20  # Patient training
+early_stopping_min_delta: 0.0001
+monitor_metric: "val_minADE"  # Best multi-modal metric
+save_top_k: 5
+save_last: true
 
-# SWA
+# SWA - Stochastic Weight Averaging (final accuracy boost)
 swa_enabled: true
-swa_epoch_start: 0.7
-swa_lrs: 1.0e-05
+swa_epoch_start: 0.75      # Start SWA at 75% of training
+swa_lrs: 3.0e-06
+swa_annealing_epochs: 10
 
-# Targets
-target_val_ade: 0.45
-target_val_fde: 0.75
+# ============================================================================
+# COMPETITION TARGETS (Aggressive)
+# ============================================================================
+target_val_ade: 0.32
+target_val_minADE: 0.22
+target_val_fde: 0.50
+target_val_minFDE: 0.35
+target_val_miss_rate: 0.02

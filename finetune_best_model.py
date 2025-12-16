@@ -55,7 +55,7 @@ FINETUNE_CONFIG = {
     "batch_size": 48,           # INCREASED for GPU utilization
     "accumulate_grad_batches": 3,  # Effective batch = 144
     "early_stopping_patience": 10,
-    "weeks": list(range(1, 10)),  # First 9 weeks for faster iteration
+    "weeks": list(range(1, 19)),  # ALL 18 weeks for maximum accuracy
     # Model architecture
     "hidden_dim": 256,
     "num_gnn_layers": 6,        # Reduced for speed

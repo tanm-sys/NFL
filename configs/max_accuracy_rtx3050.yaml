@@ -1,172 +1,169 @@
 # ============================================================================
-# 🏆 ULTIMATE SOTA PARAMETERS - COMPETITION WINNER GRADE
+# 🏆 MAXIMUM PARAMETERS CONFIG - LARGEST MODEL FOR RTX 3050 4GB
 # ============================================================================
-# Based on MTR v3 (2024 Waymo 1st Place) and Trajectron++ best practices
-# Optimized for RTX 3050 4GB VRAM with maximum accuracy focus
+# Pushing model capacity to the absolute limit of 4GB VRAM
+# Every parameter increased for maximum representational power
 #
-# Target Metrics:
-#   - minADE < 0.18 yards
-#   - minFDE < 0.28 yards  
-#   - ADE < 0.28 yards
-#   - Miss Rate < 1%
+# Target: ~12-15M parameters (3x larger than default)
 
-experiment_name: "nfl_sota_winner"
-description: "Competition-winning parameters based on MTR v3 and Trajectron++"
+experiment_name: "nfl_max_parameters"
+description: "Maximum model size for RTX 3050 4GB - competition grade"
 
 # ============================================================================
 # DATA - FULL DATASET
 # ============================================================================
 data_dir: "."
 weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-radius: 25.0              # Larger radius for more context (MTR uses 16 neighbors)
+radius: 30.0              # Maximum radius for full context
 future_seq_len: 10
 history_len: 5
 
 # ============================================================================
-# MODEL ARCHITECTURE - MTR v3 INSPIRED
+# MODEL ARCHITECTURE - MAXIMUM SIZE
 # ============================================================================
-# MTR v3: 6 encoder + 6 decoder, hidden_dim=256
 input_dim: 9
-hidden_dim: 256           # Same as MTR v3
-num_gnn_layers: 6         # 6 encoder layers (MTR v3)
-num_decoder_layers: 6     # 6 decoder layers (MTR v3)  
-heads: 8                  # Multi-head attention
-dropout: 0.08             # Slightly lower for competition
-droppath_rate: 0.15       # Stochastic depth (aggressive)
+hidden_dim: 384           # INCREASED from 256 (1.5x encoder capacity)
+num_gnn_layers: 8         # INCREASED - deep network
+num_decoder_layers: 6     # 6 decoder layers
+heads: 12                 # INCREASED - more attention heads
+dropout: 0.08
+droppath_rate: 0.18       # Higher for larger model
 
-# Probabilistic Multi-Modal Prediction
+# Probabilistic Multi-Modal - MAXIMUM
 probabilistic: true
-num_modes: 12             # More modes = better minADE/minFDE
-                          # MTR uses evolving anchors, we use GMM modes
+num_modes: 16             # MAXIMUM modes for best minADE/minFDE
 
-# Advanced Encoders
+# Advanced Components - ALL ENABLED
 use_scene_encoder: true
-temporal_encoder_type: "hybrid"  # LSTM + Attention
-use_goal_decoder: true           # Goal-conditioned (like MTR anchors)
-use_hierarchical_decoder: true   # Coarse-to-fine
+scene_encoder_inducing: 12  # More inducing points
+temporal_encoder_type: "hybrid"
+temporal_hidden: 128        # Larger temporal encoder
+use_goal_decoder: true
+use_hierarchical_decoder: true
+use_social_pooling: true
+
+# Embedding Dimensions - INCREASED
+role_emb_dim: 128         # Larger embeddings
+side_emb_dim: 64
+formation_emb_dim: 128
+alignment_emb_dim: 96
 
 # ============================================================================
-# TRAINING - COMPETITION GRADE
+# TRAINING - CAREFUL WITH LARGE MODEL
 # ============================================================================
-batch_size: 24             # Smaller for RTX 3050 with 12 modes
-accumulate_grad_batches: 8  # Effective batch = 192 (large effective batch)
-learning_rate: 0.0001      # MTR uses 1e-4 initial LR
-max_epochs: 150            # Long training for convergence
-min_epochs: 50
+batch_size: 16             # Smaller batch for large model
+accumulate_grad_batches: 12  # Effective batch = 192
+learning_rate: 0.00008     # Lower LR for large model stability
+max_epochs: 200            # Very long training
+min_epochs: 80
 
-# Optimizer - AdamW (proven for transformers)
+# Optimizer
 optimizer: "adamw"
-weight_decay: 0.05         # Strong regularization (MTR-style)
-betas: [0.9, 0.999]
+weight_decay: 0.08         # Stronger regularization for large model
+betas: [0.9, 0.98]         # Slightly different beta2
 
-# LR Scheduler - Cosine with long warmup
+# LR Scheduler
 lr_scheduler: "cosine_warmup"
-warmup_epochs: 10          # Longer warmup for stability
-warmup_start_lr: 1.0e-06   # Start very low
-min_lr: 1.0e-08            # Decay to near-zero
+warmup_epochs: 15          # Longer warmup for large model
+warmup_start_lr: 1.0e-07
+min_lr: 1.0e-09
 
 # ============================================================================
-# LOSS WEIGHTS - OPTIMIZED FOR minADE/minFDE
+# LOSS WEIGHTS - MAXIMUM POWER
 # ============================================================================
-# Primary losses
-trajectory_weight: 1.0     # Main MSE loss
-velocity_weight: 0.6       # Higher for smooth trajectories
-acceleration_weight: 0.4   # Physical plausibility  
-collision_weight: 0.20     # Collision avoidance
-coverage_weight: 0.5       # Zone coverage
+trajectory_weight: 1.0
+velocity_weight: 0.7       # Higher for smooth motion
+acceleration_weight: 0.5   # Physical plausibility
+collision_weight: 0.25     # Strong collision avoidance
+coverage_weight: 0.6
 
 # ============================================================================
-# SOTA CONTRASTIVE LOSSES - FULL POWER
+# SOTA LOSSES - ALL AT MAXIMUM
 # ============================================================================
-# Social-NCE (social interaction learning)
 use_social_nce: true
-social_nce_weight: 0.20    # Higher weight for social learning
-social_nce_temperature: 0.05  # Lower temp = sharper contrast
+social_nce_weight: 0.25    # Maximum social learning
+social_nce_temperature: 0.04
 
-# Contrastive Learning
 use_contrastive_loss: true
-contrastive_weight: 0.15
+contrastive_weight: 0.20
 
-# Winner-Takes-All (multi-modal training)
 use_wta_loss: true
-wta_k_best: 3              # Top-3 modes (more exploration)
-wta_weight: 0.8            # Strong WTA signal
+wta_k_best: 4              # Top-4 modes for 16-mode model
+wta_weight: 1.0
 
-# Diversity (mode separation)
 use_diversity_loss: true
-diversity_weight: 0.06     # Higher for distinct modes
-diversity_min_distance: 2.5  # Larger minimum separation
+diversity_weight: 0.08     # Strong diversity for 16 modes
+diversity_min_distance: 3.0  # Large separation
 
-# Endpoint Focal (hard endpoint focus)
 use_endpoint_focal: true
-endpoint_focal_weight: 0.35  # Higher focus on endpoints (FDE)
-endpoint_focal_gamma: 3.0    # Stronger focusing
+endpoint_focal_weight: 0.40  # Maximum endpoint focus
+endpoint_focal_gamma: 3.5
 
 # ============================================================================
 # ADVANCED REGULARIZATION
 # ============================================================================
-gradient_clip_val: 0.3     # Tighter clipping for stability
-use_augmentation: true     # Data augmentation
-augmentation_rotate: true  # Rotation augmentation
-augmentation_flip: true    # Horizontal flip
-use_huber_loss: true       # Robust to outliers
-huber_delta: 0.5           # Tighter delta
-label_smoothing: 0.05      # Light smoothing
-use_ema: true              # Exponential Moving Average
-ema_decay: 0.999           # EMA decay rate
+gradient_clip_val: 0.25    # Tight clipping for large model
+use_augmentation: true
+augmentation_rotate: true
+augmentation_flip: true
+augmentation_scale: true   # Scale augmentation
+use_huber_loss: true
+huber_delta: 0.4           # Tighter delta
+label_smoothing: 0.03
+use_ema: true
+ema_decay: 0.9995          # Slower EMA for large model
 
 # ============================================================================
-# HARDWARE - RTX 3050 4GB OPTIMIZED
+# HARDWARE - MAXIMUM UTILIZATION
 # ============================================================================
 precision: "16-mixed"
 accelerator: "gpu"
 devices: 1
 benchmark: true
 deterministic: false
-num_workers: 0             # Pre-cached graphs
+num_workers: 0
 
-# Memory optimization
-in_memory_cache_size: 150  # RAM cache
+# Memory - minimal caching to fit model
+in_memory_cache_size: 100
 persist_cache: true
 cache_dir: "cache/finetune/train"
 
 # ============================================================================
-# CALLBACKS - AGGRESSIVE MONITORING
+# CALLBACKS
 # ============================================================================
-early_stopping_patience: 25   # Very patient
-early_stopping_min_delta: 0.00005  # Tiny improvement detection
-monitor_metric: "val_minADE"  # Monitor best multi-modal metric
-save_top_k: 10                # Keep more checkpoints
+early_stopping_patience: 30   # Very patient for large model
+early_stopping_min_delta: 0.00002
+monitor_metric: "val_minADE"
+save_top_k: 15
 save_last: true
 
-# SWA - Stochastic Weight Averaging
+# SWA
 swa_enabled: true
-swa_epoch_start: 0.70         # Start at 70%
-swa_lrs: 1.0e-06
-swa_annealing_epochs: 15
-
-# Model Ensemble (inference only)
-ensemble_enabled: true
-ensemble_top_k: 3             # Average top-3 checkpoints
+swa_epoch_start: 0.65
+swa_lrs: 5.0e-07
+swa_annealing_epochs: 20
 
 # ============================================================================
-# COMPETITION TARGETS (AGGRESSIVE)
+# TARGET METRICS (WORLD-CLASS)
 # ============================================================================
-target_val_ade: 0.28
-target_val_minADE: 0.18
-target_val_fde: 0.42
-target_val_minFDE: 0.28
-target_val_miss_rate: 0.01
+target_val_ade: 0.22
+target_val_minADE: 0.14
+target_val_fde: 0.35
+target_val_minFDE: 0.22
+target_val_miss_rate: 0.005
 
 # ============================================================================
-# NOTES
+# ESTIMATED MODEL SIZE
 # ============================================================================
-# Based on:
-# - MTR v3 (Waymo 2024 1st place): 6 encoder/decoder, hidden=256, LR=1e-4
-# - Trajectron++: Probabilistic multi-modal, social modeling
-# - Best practices: WTA for multi-modal, SWA for generalization
+# hidden_dim=384, 8 layers, 12 heads, 16 modes
+# Encoder: ~8M params
+# Decoder: ~3M params  
+# Losses: ~15K params
+# TOTAL: ~11-12M parameters
 #
-# For RTX 3050 4GB:
-# - batch_size=24 with 12 modes fits in 4GB
-# - Pre-cache graphs to eliminate CPU bottleneck
-# - accumulate_grad=8 for effective batch of 192
+# VRAM Usage (estimated):
+# - Model: ~800 MB
+# - Batch 16: ~1.2 GB
+# - Gradients: ~1.5 GB
+# - Optimizer: ~500 MB
+# - TOTAL: ~4.0 GB (fits in RTX 3050!)

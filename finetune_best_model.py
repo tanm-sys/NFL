@@ -18,7 +18,6 @@ import sys
 sys.path.insert(0, 'src')
 sys.path.insert(0, '.')
 
-import os
 import json
 import torch
 import pytorch_lightning as pl
@@ -36,7 +35,6 @@ from rich.panel import Panel
 
 from src.train import NFLGraphPredictor
 from src.data_loader import DataLoader, build_play_metadata, expand_play_tuples, GraphDataset
-from src.features import create_graph_data
 
 console = Console()
 
@@ -141,7 +139,7 @@ def finetune():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     # Load base model
-    console.print(f"\n[yellow]Loading base checkpoint...[/yellow]")
+    console.print("\n[yellow]Loading base checkpoint...[/yellow]")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     model = NFLGraphPredictor.load_from_checkpoint(

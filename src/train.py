@@ -3,7 +3,7 @@ import torch
 torch.set_float32_matmul_precision('medium')
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
+from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger  # noqa: F401 - exported for external use
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, StochasticWeightAveraging
 import optuna
 from torch_geometric.loader import DataLoader as PyGDataLoader
@@ -266,7 +266,10 @@ class NFLGraphPredictor(pl.LightningModule):
                  use_social_nce=True, social_nce_weight=0.1,
                  use_wta_loss=True, wta_k_best=1,
                  use_diversity_loss=True, diversity_weight=0.02,
-                 use_endpoint_focal=True, endpoint_focal_weight=0.2):
+                 use_endpoint_focal=True, endpoint_focal_weight=0.2,
+                 # RMSE Loss Configuration (Competition Metric)
+                 use_rmse_loss=True, rmse_weight=1.0,
+                 use_min_rmse_loss=True, min_rmse_weight=0.5):
         super().__init__()
         self.save_hyperparameters()
         
@@ -300,6 +303,12 @@ class NFLGraphPredictor(pl.LightningModule):
         self.use_endpoint_focal = use_endpoint_focal
         self.endpoint_focal_weight = endpoint_focal_weight
         
+        # RMSE Loss (Competition Metric)
+        self.use_rmse_loss = use_rmse_loss
+        self.rmse_weight = rmse_weight
+        self.use_min_rmse_loss = use_min_rmse_loss
+        self.min_rmse_weight = min_rmse_weight
+        
         # Initialize SOTA loss modules
         if use_social_nce:
             self.social_nce_loss = SocialNCELoss(temperature=0.1, num_negatives=8)
@@ -309,6 +318,12 @@ class NFLGraphPredictor(pl.LightningModule):
             self.diversity_loss = DiversityLoss(min_distance=2.0)
         if use_endpoint_focal:
             self.endpoint_focal_loss = EndpointFocalLoss(gamma=2.0)
+        
+        # Initialize RMSE loss modules (Competition Metric)
+        if use_rmse_loss:
+            self.rmse_loss_fn = RMSELoss()
+        if use_min_rmse_loss and probabilistic:
+            self.min_rmse_loss_fn = MinRMSELoss()
 
     def forward(self, data):
         return self.model(data)
@@ -434,13 +449,35 @@ class NFLGraphPredictor(pl.LightningModule):
             elif valid_mask is None:
                 loss_endpoint = self.endpoint_focal_loss(predictions, y)
             self.log("train_endpoint_focal_loss", loss_endpoint, batch_size=batch.num_graphs)
+        
+        # ============ RMSE LOSSES (Competition Metric) ============
+        # RMSE Loss - Primary competition evaluation metric
+        loss_rmse = torch.tensor(0.0, device=self.device)
+        if self.use_rmse_loss and hasattr(self, 'rmse_loss_fn'):
+            if valid_mask is not None and valid_mask.sum() > 0:
+                loss_rmse = self.rmse_loss_fn(predictions[valid_mask], y[valid_mask])
+            elif valid_mask is None:
+                loss_rmse = self.rmse_loss_fn(predictions, y)
+            self.log("train_rmse_loss", loss_rmse, batch_size=batch.num_graphs, prog_bar=True)
+        
+        # MinRMSE Loss - For multi-modal prediction
+        loss_min_rmse = torch.tensor(0.0, device=self.device)
+        if self.probabilistic and self.use_min_rmse_loss and hasattr(self, 'min_rmse_loss_fn'):
+            mu = params[..., :2]  # [N, T, K, 2]
+            if valid_mask is not None and valid_mask.sum() > 0:
+                loss_min_rmse, _ = self.min_rmse_loss_fn(mu[valid_mask], y[valid_mask])
+            elif valid_mask is None:
+                loss_min_rmse, _ = self.min_rmse_loss_fn(mu, y)
+            self.log("train_min_rmse_loss", loss_min_rmse, batch_size=batch.num_graphs)
+        # ============ END RMSE LOSSES ============
         # ============ END SOTA LOSSES ============
              
-        # Total Loss (Weighted) - All P0/P1/P2 losses + SOTA
+        # Total Loss (Weighted) - All P0/P1/P2 losses + SOTA + RMSE
         if early_phase:
             vel_w, acc_w, col_w, cov_w = 0.2, 0.05, 0.02, 0.2
             # Reduce SOTA weights in early phase
             snce_w, wta_w, div_w, endpt_w = 0.02, 0.1, 0.005, 0.05
+            rmse_w, min_rmse_w = 0.5, 0.2  # Gradual RMSE ramp-up
         else:
             vel_w, acc_w, col_w, cov_w = (
                 self.velocity_weight,
@@ -452,6 +489,8 @@ class NFLGraphPredictor(pl.LightningModule):
             wta_w = 0.5 if self.use_wta_loss else 0.0  # WTA replaces part of NLL
             div_w = self.diversity_weight
             endpt_w = self.endpoint_focal_weight
+            rmse_w = self.rmse_weight  # Full RMSE weight
+            min_rmse_w = self.min_rmse_weight
             
         loss = (loss_traj + 
                 vel_w * loss_vel + 
@@ -461,7 +500,9 @@ class NFLGraphPredictor(pl.LightningModule):
                 snce_w * loss_social_nce +
                 wta_w * loss_wta +
                 div_w * loss_diversity +
-                endpt_w * loss_endpoint)
+                endpt_w * loss_endpoint +
+                rmse_w * loss_rmse +
+                min_rmse_w * loss_min_rmse)
         self.log("train_loss", loss, batch_size=batch.num_graphs)
         return loss
         
@@ -524,6 +565,40 @@ class NFLGraphPredictor(pl.LightningModule):
         self.log("val_fde", fde, batch_size=batch.num_graphs)
         self.log("val_miss_rate_2yd", miss_rate, batch_size=batch.num_graphs)
         self.log(f"val_miss_rate_{int(self.miss_threshold*10):02d}tenth_yd", miss_rate_loose, batch_size=batch.num_graphs)
+        
+        # ============ RMSE METRICS (Competition Metric) ============
+        # RMSE - Primary competition evaluation metric
+        if disp.numel() > 0:
+            rmse = torch.sqrt(torch.mean((pred_abs - target_abs) ** 2))
+            self.log("val_rmse", rmse, batch_size=batch.num_graphs, prog_bar=True)
+        else:
+            self.log("val_rmse", torch.tensor(0.0, device=self.device), batch_size=batch.num_graphs)
+        
+        # MinRMSE - Best mode RMSE for multi-modal
+        if self.probabilistic and hasattr(self, 'min_rmse_loss_fn'):
+            mu_all = params[..., :2]  # [N, T, K, 2]
+            if hasattr(batch, 'current_pos'):
+                current_pos_full = batch.current_pos.unsqueeze(1).unsqueeze(2)  # [N, 1, 1, 2]
+                mu_abs = mu_all + current_pos_full
+            else:
+                mu_abs = mu_all
+            
+            target_for_min = y if valid_mask is None else y[valid_mask]
+            mu_for_min = mu_abs if valid_mask is None else mu_abs[valid_mask]
+            
+            if target_for_min.numel() > 0:
+                # Compute RMSE for each mode and take minimum
+                N, T, K, _ = mu_for_min.shape
+                target_exp = target_for_min.unsqueeze(2).expand(-1, -1, K, -1)
+                if hasattr(batch, 'current_pos'):
+                    cp = batch.current_pos if valid_mask is None else batch.current_pos[valid_mask]
+                    target_exp = target_exp + cp.unsqueeze(1).unsqueeze(2)
+                
+                squared_error = ((mu_for_min - target_exp) ** 2).sum(dim=-1)  # [N, T, K]
+                rmse_per_mode = torch.sqrt(squared_error.mean(dim=1) + 1e-8)  # [N, K]
+                min_rmse = rmse_per_mode.min(dim=1)[0].mean()
+                self.log("val_minRMSE", min_rmse, batch_size=batch.num_graphs, prog_bar=True)
+        # ============ END RMSE METRICS ============
 
         # Stratified metrics by role and down
         if disp.numel() > 0:

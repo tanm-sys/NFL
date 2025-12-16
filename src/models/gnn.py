@@ -68,7 +68,7 @@ class TemporalHistoryEncoder(nn.Module):
         )
         self.output_proj = nn.Linear(hidden_dim, hidden_dim)
         
-    def forward(self, history):
+    def forward(self, history: Optional[Tensor]) -> Optional[Tensor]:
         """
         Args:
             history: [N, T, 4] past motion features (vel_x, vel_y, acc_x, acc_y)
@@ -680,8 +680,11 @@ class ProbabilisticTrajectoryDecoder(nn.Module):
             mode_params = torch.cat([mu, sigma, rho], dim=-1)  # [N, T, 5]
             all_mode_params.append(mode_params)
         
-        # Stack all modes: [N, T, K, 5]
-        params = torch.stack(all_mode_params, dim=2)
+        # Stack all modes: [N, T, K, 5] - using einops for cleaner code
+        if EINOPS_AVAILABLE:
+            params = rearrange(all_mode_params, 'k n t d -> n t k d')
+        else:
+            params = torch.stack(all_mode_params, dim=2)
         if pad_mask is not None:
             params = params.masked_fill(pad_mask.unsqueeze(-1).unsqueeze(-1), 0.0)
         
@@ -776,7 +779,12 @@ class NFLGraphTransformer(nn.Module):
         # Multi-Task Head: Coverage Classification (Binary: Man vs Zone)
         self.classifier = nn.Linear(hidden_dim, 1)
         
-    def forward(self, data, return_attention_weights=False, return_distribution=False):
+    def forward(
+        self, 
+        data: Union[Data, Batch], 
+        return_attention_weights: bool = False, 
+        return_distribution: bool = False
+    ) -> Union[Tuple[Tensor, Tensor, Optional[Tensor]], Tuple[Tensor, Tensor, Tensor, Optional[Tensor]]]:
         """
         Args:
             data: PyG Batch Data object

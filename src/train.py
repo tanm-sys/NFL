@@ -22,6 +22,8 @@ from src.losses.contrastive_losses import (
     DiversityLoss,
     WinnerTakesAllLoss,
     EndpointFocalLoss,
+    RMSELoss,
+    MinRMSELoss,
 )
 import numpy as np
 import json

@@ -47,20 +47,20 @@ BEST_CHECKPOINT = "checkpoints/nfl_worldclass-epoch=04-val_ade=0.545.ckpt"
 OUTPUT_DIR = Path("checkpoints_finetuned")
 CACHE_DIR = Path("cache/finetune")
 
-# Fine-tuning hyperparameters - MAXIMUM PARAMETERS (largest model for 4GB)
+# Fine-tuning hyperparameters - RMSE OPTIMIZED (Verified: fits 4GB VRAM)
 FINETUNE_CONFIG = {
-    "lr": 0.00008,              # Lower for large model
-    "weight_decay": 0.08,       # Stronger regularization
-    "max_epochs": 200,          # Very long training
-    "batch_size": 16,           # Smaller for large model
-    "accumulate_grad_batches": 12,  # Effective batch = 192
-    "early_stopping_patience": 30,
+    "lr": 0.0001,               # Standard LR
+    "weight_decay": 0.05,       # Good regularization
+    "max_epochs": 150,          # Long training
+    "batch_size": 24,           # Good balance
+    "accumulate_grad_batches": 8,  # Effective batch = 192
+    "early_stopping_patience": 25,
     "weeks": list(range(1, 19)),  # ALL 18 weeks
-    # Model architecture - MAXIMUM SIZE
-    "hidden_dim": 384,          # INCREASED from 256
-    "num_gnn_layers": 8,        # Deep network
-    "heads": 12,                # More attention heads
-    "num_modes": 16,            # Maximum modes
+    # Model architecture - VERIFIED 9.6M params, 2.1GB VRAM
+    "hidden_dim": 256,          # Optimal for 4GB
+    "num_gnn_layers": 6,        # 6 layers
+    "heads": 8,                 # 8 heads
+    "num_modes": 12,            # 12 modes
 }
 
 

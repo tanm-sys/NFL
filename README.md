@@ -283,15 +283,23 @@ nfl-analytics-engine/
 
 ---
 
-## 🏆 Target Metrics
+## 🏆 Competition Metric: RMSE
 
-| Metric | Target | World-Class |
-|--------|--------|-------------|
-| **ADE** | < 0.22 | < 0.18 |
-| **minADE** | < 0.14 | < 0.10 |
-| **FDE** | < 0.35 | < 0.28 |
-| **minFDE** | < 0.22 | < 0.18 |
-| **Miss Rate** | < 0.5% | < 0.2% |
+> **Evaluation**: Submissions are evaluated using **Root Mean Squared Error (RMSE)** between predicted and observed target positions.
+
+```
+RMSE = √(mean((pred - target)²))
+```
+
+### Target Performance (12M Model)
+
+| Metric | Target | World-Class | Description |
+|--------|--------|-------------|-------------|
+| **RMSE** | < 0.35 | < 0.28 | Competition metric |
+| **minRMSE** | < 0.25 | < 0.20 | Best mode RMSE |
+| ADE | < 0.22 | < 0.18 | Secondary metric |
+| FDE | < 0.35 | < 0.28 | Secondary metric |
+| Miss Rate | < 0.5% | < 0.2% | Secondary metric |
 
 ---
 

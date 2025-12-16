@@ -6,6 +6,7 @@ State-of-the-art contrastive learning techniques for trajectory forecasting:
 - Social-NCE: Collision-aware trajectory learning via negative sampling
 - Trajectory Contrastive: History-future alignment (TrajCLIP-style)
 - Diversity Loss: Encourages multi-modal predictions
+- RMSE Loss: Competition evaluation metric
 
 References:
 - Social NCE: Contrastive Learning of Socially-aware Motion Representations (CVPR 2021)
@@ -16,6 +17,115 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, Tuple
+
+
+class RMSELoss(nn.Module):
+    """
+    Root Mean Squared Error Loss - Competition Evaluation Metric.
+    
+    RMSE = sqrt(mean((pred - target)^2))
+    
+    This is the official evaluation metric for the NFL Big Data Bowl 2026.
+    Optimizing directly for RMSE ensures the model minimizes the competition score.
+    
+    Args:
+        reduction: 'mean' (default) or 'sum'
+    """
+    def __init__(self, reduction: str = 'mean'):
+        super().__init__()
+        self.reduction = reduction
+        
+    def forward(
+        self,
+        predictions: torch.Tensor,
+        targets: torch.Tensor,
+        mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """
+        Compute RMSE loss.
+        
+        Args:
+            predictions: [N, T, 2] or [N, 2] predicted positions
+            targets: [N, T, 2] or [N, 2] ground truth positions
+            mask: Optional validity mask
+            
+        Returns:
+            rmse: Scalar RMSE loss
+        """
+        # Squared error
+        squared_error = (predictions - targets) ** 2
+        
+        # Sum over coordinate dimension (x, y)
+        squared_error = squared_error.sum(dim=-1)  # [N, T] or [N]
+        
+        if mask is not None:
+            # Apply mask
+            squared_error = squared_error * mask
+            mse = squared_error.sum() / (mask.sum() + 1e-6)
+        else:
+            mse = squared_error.mean()
+        
+        # Root of MSE
+        rmse = torch.sqrt(mse + 1e-8)
+        
+        return rmse
+
+
+class MinRMSELoss(nn.Module):
+    """
+    Minimum RMSE across multiple modes (for multi-modal prediction).
+    
+    Takes the best mode prediction and computes RMSE.
+    This is the multi-modal version of RMSE for probabilistic models.
+    
+    Args:
+        reduction: 'mean' (default) or 'sum'
+    """
+    def __init__(self, reduction: str = 'mean'):
+        super().__init__()
+        self.reduction = reduction
+        
+    def forward(
+        self,
+        predictions: torch.Tensor,
+        targets: torch.Tensor,
+        mode_probs: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Compute minimum RMSE across modes.
+        
+        Args:
+            predictions: [N, T, K, 2] multi-modal predictions
+            targets: [N, T, 2] ground truth
+            mode_probs: [N, K] optional mode probabilities
+            
+        Returns:
+            min_rmse: Scalar minimum RMSE
+            best_mode_idx: [N] index of best mode per sample
+        """
+        N, T, K, _ = predictions.shape
+        
+        # Expand targets for all modes
+        targets_exp = targets.unsqueeze(2).expand(-1, -1, K, -1)  # [N, T, K, 2]
+        
+        # Squared error per mode
+        squared_error = ((predictions - targets_exp) ** 2).sum(dim=-1)  # [N, T, K]
+        
+        # MSE per mode
+        mse_per_mode = squared_error.mean(dim=1)  # [N, K]
+        
+        # RMSE per mode
+        rmse_per_mode = torch.sqrt(mse_per_mode + 1e-8)  # [N, K]
+        
+        # Find best mode (minimum RMSE)
+        min_rmse_per_sample, best_mode_idx = rmse_per_mode.min(dim=1)  # [N], [N]
+        
+        # Average across samples
+        min_rmse = min_rmse_per_sample.mean()
+        
+        return min_rmse, best_mode_idx
+
+
 
 
 class SocialNCELoss(nn.Module):

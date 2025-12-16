@@ -114,20 +114,16 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
-        persistent_workers=True,
+        num_workers=0,  # Reduced to avoid startup delay
         pin_memory=True,
-        prefetch_factor=4,  # Async prefetch 4 batches ahead
     )
     
     val_loader = PyGDataLoader(
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,
-        persistent_workers=True,
+        num_workers=0,  # Reduced to avoid startup delay
         pin_memory=True,
-        prefetch_factor=4,
     )
     
     return train_loader, val_loader

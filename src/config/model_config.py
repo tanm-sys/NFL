@@ -30,11 +30,33 @@ class ModelConfig:
     history_input_dim: int = 4  # vel_x, vel_y, acc_x, acc_y
     history_lstm_layers: int = 2
     
+    # Temporal Encoder Type (SOTA: Mamba for efficiency)
+    temporal_encoder_type: str = "lstm"  # "lstm", "mamba", "bimamba", "hybrid"
+    
     # Embeddings
     num_roles: int = 5
     num_sides: int = 3
     num_formations: int = 8
     num_alignments: int = 10
+    
+    # SOTA Loss Functions
+    use_social_nce: bool = True
+    social_nce_weight: float = 0.1
+    social_nce_temperature: float = 0.1
+    
+    use_contrastive_loss: bool = True
+    contrastive_weight: float = 0.05
+    
+    use_wta_loss: bool = True  # Winner-Takes-All for multi-modal
+    wta_k_best: int = 1
+    
+    use_diversity_loss: bool = True
+    diversity_weight: float = 0.02
+    diversity_min_distance: float = 2.0
+    
+    use_endpoint_focal: bool = True
+    endpoint_focal_weight: float = 0.2
+    endpoint_focal_gamma: float = 2.0
     
     def __post_init__(self):
         """Validate configuration."""

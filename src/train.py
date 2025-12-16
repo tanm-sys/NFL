@@ -14,6 +14,13 @@ from src.data_loader import (
     build_play_metadata,
     expand_play_tuples,
 )
+# SOTA Contrastive Losses
+from src.losses.contrastive_losses import (
+    SocialNCELoss,
+    DiversityLoss,
+    WinnerTakesAllLoss,
+    EndpointFocalLoss,
+)
 import numpy as np
 import json
 from pathlib import Path
@@ -250,7 +257,12 @@ class NFLGraphPredictor(pl.LightningModule):
                  acceleration_weight=0.1, coverage_weight=0.5, collision_weight=0.05,
                  use_augmentation=True, use_huber_loss=False, huber_delta=1.0,
                  weight_decay=0.05, optimizer_type="adamw", warmup_epochs=5,
-                 label_smoothing=0.05, miss_threshold=2.5):
+                 label_smoothing=0.05, miss_threshold=2.5,
+                 # SOTA Loss Configuration
+                 use_social_nce=True, social_nce_weight=0.1,
+                 use_wta_loss=True, wta_k_best=1,
+                 use_diversity_loss=True, diversity_weight=0.02,
+                 use_endpoint_focal=True, endpoint_focal_weight=0.2):
         super().__init__()
         self.save_hyperparameters()
         
@@ -274,6 +286,25 @@ class NFLGraphPredictor(pl.LightningModule):
         self.warmup_epochs = warmup_epochs
         self.label_smoothing = label_smoothing
         self.miss_threshold = miss_threshold
+        
+        # SOTA Loss Functions
+        self.use_social_nce = use_social_nce
+        self.social_nce_weight = social_nce_weight
+        self.use_wta_loss = use_wta_loss
+        self.use_diversity_loss = use_diversity_loss
+        self.diversity_weight = diversity_weight
+        self.use_endpoint_focal = use_endpoint_focal
+        self.endpoint_focal_weight = endpoint_focal_weight
+        
+        # Initialize SOTA loss modules
+        if use_social_nce:
+            self.social_nce_loss = SocialNCELoss(temperature=0.1, num_negatives=8)
+        if use_wta_loss and probabilistic:
+            self.wta_loss = WinnerTakesAllLoss(k_best=wta_k_best)
+        if use_diversity_loss and probabilistic:
+            self.diversity_loss = DiversityLoss(min_distance=2.0)
+        if use_endpoint_focal:
+            self.endpoint_focal_loss = EndpointFocalLoss(gamma=2.0)
 
     def forward(self, data):
         return self.model(data)
@@ -353,10 +384,59 @@ class NFLGraphPredictor(pl.LightningModule):
                     cov_pred[cov_mask], target_cov[cov_mask]
                 )
                 self.log("train_cov_loss", loss_cov, batch_size=cov_mask.sum())
+        
+        # ============ SOTA LOSSES ============
+        # Social-NCE Loss (collision-aware contrastive learning)
+        loss_social_nce = torch.tensor(0.0, device=self.device)
+        if self.use_social_nce and hasattr(self, 'social_nce_loss'):
+            try:
+                # Get node embeddings from model (run a quick forward to extract them)
+                with torch.no_grad():
+                    node_embs, _ = self.model.encoder(
+                        batch.x, batch.edge_index, batch.edge_attr,
+                        context=batch.context if hasattr(batch, 'context') else None,
+                        batch=batch.batch if hasattr(batch, 'batch') else None
+                    )
+                loss_social_nce = self.social_nce_loss(
+                    predictions, node_embs.detach(), 
+                    batch_idx=batch.batch if hasattr(batch, 'batch') else None
+                )
+                self.log("train_social_nce_loss", loss_social_nce, batch_size=batch.num_graphs)
+            except Exception:
+                pass  # Skip if shapes don't match during early training
+        
+        # Winner-Takes-All Loss (for probabilistic multi-modal)
+        loss_wta = torch.tensor(0.0, device=self.device)
+        if self.probabilistic and self.use_wta_loss and hasattr(self, 'wta_loss'):
+            wta_preds = params[..., :2]  # [N, T, K, 2] means only
+            mask_nodes = valid_mask.bool() if valid_mask is not None else None
+            if mask_nodes is not None and mask_nodes.sum() > 0:
+                loss_wta, _ = self.wta_loss(wta_preds[mask_nodes], y[mask_nodes], mode_probs[mask_nodes])
+            elif mask_nodes is None:
+                loss_wta, _ = self.wta_loss(wta_preds, y, mode_probs)
+            self.log("train_wta_loss", loss_wta, batch_size=batch.num_graphs)
+        
+        # Diversity Loss (encourage multi-modal spread)
+        loss_diversity = torch.tensor(0.0, device=self.device)
+        if self.probabilistic and self.use_diversity_loss and hasattr(self, 'diversity_loss'):
+            loss_diversity = self.diversity_loss(params, mode_probs)
+            self.log("train_diversity_loss", loss_diversity, batch_size=batch.num_graphs)
+        
+        # Endpoint Focal Loss (focus on final position)
+        loss_endpoint = torch.tensor(0.0, device=self.device)
+        if self.use_endpoint_focal and hasattr(self, 'endpoint_focal_loss'):
+            if valid_mask is not None and valid_mask.sum() > 0:
+                loss_endpoint = self.endpoint_focal_loss(predictions[valid_mask], y[valid_mask])
+            elif valid_mask is None:
+                loss_endpoint = self.endpoint_focal_loss(predictions, y)
+            self.log("train_endpoint_focal_loss", loss_endpoint, batch_size=batch.num_graphs)
+        # ============ END SOTA LOSSES ============
              
-        # Total Loss (Weighted) - All P0/P1/P2 losses
+        # Total Loss (Weighted) - All P0/P1/P2 losses + SOTA
         if early_phase:
             vel_w, acc_w, col_w, cov_w = 0.2, 0.05, 0.02, 0.2
+            # Reduce SOTA weights in early phase
+            snce_w, wta_w, div_w, endpt_w = 0.02, 0.1, 0.005, 0.05
         else:
             vel_w, acc_w, col_w, cov_w = (
                 self.velocity_weight,
@@ -364,11 +444,20 @@ class NFLGraphPredictor(pl.LightningModule):
                 self.collision_weight,
                 self.coverage_weight,
             )
+            snce_w = self.social_nce_weight
+            wta_w = 0.5 if self.use_wta_loss else 0.0  # WTA replaces part of NLL
+            div_w = self.diversity_weight
+            endpt_w = self.endpoint_focal_weight
+            
         loss = (loss_traj + 
                 vel_w * loss_vel + 
                 acc_w * loss_acc +
                 col_w * loss_collision +
-                cov_w * loss_cov)
+                cov_w * loss_cov +
+                snce_w * loss_social_nce +
+                wta_w * loss_wta +
+                div_w * loss_diversity +
+                endpt_w * loss_endpoint)
         self.log("train_loss", loss, batch_size=batch.num_graphs)
         return loss
         

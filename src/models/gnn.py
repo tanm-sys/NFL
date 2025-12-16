@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATv2Conv, GlobalAttention, global_mean_pool
+from torch import Tensor
+from typing import Optional, Tuple, Union
+from torch_geometric.nn import GATv2Conv, global_mean_pool
+from torch_geometric.nn.aggr import AttentionalAggregation
 from torch_geometric.data import Data, Batch
 from torch_geometric.utils import scatter, to_dense_batch
 
@@ -11,6 +14,19 @@ try:
     EINOPS_AVAILABLE = True
 except ImportError:
     EINOPS_AVAILABLE = False
+    # Fallback implementations
+    def rearrange(x: Tensor, pattern: str, **kwargs) -> Tensor:
+        """Fallback rearrange - only supports basic patterns."""
+        return x
+    def repeat(x: Tensor, pattern: str, **kwargs) -> Tensor:
+        """Fallback repeat - only supports basic patterns."""
+        return x
+
+# Type aliases for clarity (SOTA practice)
+NodeFeatures = Tensor  # [N, D] node feature matrix
+EdgeIndex = Tensor     # [2, E] edge connectivity
+EdgeAttr = Tensor      # [E, D_edge] edge features
+BatchIndex = Tensor    # [N] batch assignment per node
 
 
 class DropPath(nn.Module):
@@ -133,6 +149,54 @@ class SceneFlowEncoder(nn.Module):
         return self.output_proj(scene)
 
 
+class LearnableGraphPooling(nn.Module):
+    """
+    SOTA: Learnable graph pooling using AttentionalAggregation from PyG.
+    
+    This replaces simple mean pooling with attention-based pooling,
+    allowing the model to learn which nodes are most important for
+    graph-level predictions.
+    
+    Used in top trajectory prediction models (Waymo, Argoverse winners).
+    """
+    def __init__(self, hidden_dim: int = 64):
+        super().__init__()
+        # Gate network determines node importance
+        gate_nn = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
+        )
+        # Transform network creates the pooled representation  
+        nn_transform = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim)
+        )
+        # Use modern AttentionalAggregation (replaces deprecated GlobalAttention)
+        self.attention_pool = AttentionalAggregation(gate_nn, nn_transform)
+        self.layer_norm = nn.LayerNorm(hidden_dim)
+        
+    def forward(self, x: NodeFeatures, batch: Optional[BatchIndex] = None) -> Tensor:
+        """
+        Learnable graph-level pooling.
+        
+        Args:
+            x: [N, D] node embeddings
+            batch: [N] batch assignment (None for single graph)
+            
+        Returns:
+            [B, D] graph-level embeddings
+        """
+        if batch is None:
+            batch = torch.zeros(x.size(0), dtype=torch.long, device=x.device)
+        
+        # AttentionalAggregation handles the pooling
+        pooled = self.attention_pool(x, batch)
+        
+        return self.layer_norm(pooled)
+
+
 class GoalConditionedDecoder(nn.Module):
     """
     P3: Goal-conditioned trajectory prediction.
@@ -203,9 +267,14 @@ class GoalConditionedDecoder(nn.Module):
         # Combine context and goal
         combined = context_emb + goal_emb  # [N, H]
         
-        # Decode trajectory
-        x = combined.unsqueeze(1).repeat(1, self.future_seq_len, 1)  # [N, T, H]
-        x = x + self.query_pos_emb.repeat(num_nodes, 1, 1)
+        # Decode trajectory - use einops for cleaner expansion
+        if EINOPS_AVAILABLE:
+            x = repeat(combined, 'n h -> n t h', t=self.future_seq_len)
+            pos_emb = repeat(self.query_pos_emb, '1 t h -> n t h', n=num_nodes)
+        else:
+            x = combined.unsqueeze(1).repeat(1, self.future_seq_len, 1)  # [N, T, H]
+            pos_emb = self.query_pos_emb.repeat(num_nodes, 1, 1)
+        x = x + pos_emb
         
         out = self.transformer(x)  # [N, T, H]
         predictions = self.output_head(out)  # [N, T, 2]

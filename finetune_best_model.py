@@ -114,7 +114,7 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
         train_dataset,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=2,  # Balanced: faster training, minimal startup
+        num_workers=0,  # Set to 0 to avoid PyG multiprocessing deadlock
         pin_memory=True,
     )
     
@@ -122,7 +122,7 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
         val_dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,
+        num_workers=0,
         pin_memory=True,
     )
     

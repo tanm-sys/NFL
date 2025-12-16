@@ -15,9 +15,8 @@ Metrics:
 
 import numpy as np
 import polars as pl
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
-from scipy.spatial.distance import cdist
 from scipy.stats import pearsonr
 
 try:

@@ -75,7 +75,7 @@ accelerator: "gpu"
 devices: 1
 benchmark: true
 deterministic: false
-num_workers: 2
+num_workers: 0
 
 # Caching - MAXIMUM
 in_memory_cache_size: 100

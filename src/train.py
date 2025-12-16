@@ -3,13 +3,13 @@ import torch
 torch.set_float32_matmul_precision('medium')
 import torch.nn.functional as F
 import pytorch_lightning as pl
-from pytorch_lightning.loggers import WandbLogger
+from pytorch_lightning.loggers import WandbLogger, TensorBoardLogger
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint, StochasticWeightAveraging
 import optuna
 from torch_geometric.loader import DataLoader as PyGDataLoader
 from torch_geometric.data import Batch
 from src.models.gnn import NFLGraphTransformer
-from src.features import create_graph_data, build_edge_index_and_attr
+from src.features import build_edge_index_and_attr
 from src.data_loader import (
     DataLoader,
     GraphDataset,

@@ -12,27 +12,19 @@ Main entry point for generating all competition deliverables:
 import torch
 import polars as pl
 import numpy as np
-from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 
 from src.train import NFLGraphPredictor
 from src.data_loader import DataLoader as TrackingLoader, GraphDataset, build_play_metadata, expand_play_tuples
 from src.competition_metrics import (
     calculate_confidence_intervals,
-    calculate_spatial_control_probability,
-    calculate_route_anticipation_score,
     calculate_recovery_ability_index,
     predict_coverage_bust,
-    calculate_coverage_response_time,
-    format_for_submission,
-    TrajectoryPrediction,
 )
 from src.metrics import (
     calculate_zone_collapse_speed,
     calculate_defensive_reaction_time,
-    calculate_matchup_difficulty,
-    calculate_separation_at_target,
     calculate_coverage_pressure_index,
 )
 from torch_geometric.loader import DataLoader as PyGDataLoader

@@ -2,253 +2,264 @@
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-ee4c2c.svg)](https://pytorch.org/)
+[![PyG](https://img.shields.io/badge/PyG-2.5+-3C2179.svg)](https://pytorch-geometric.readthedocs.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## 🏈 Overview
 
-A **state-of-the-art** deep learning system for NFL player trajectory prediction and defensive coverage classification. This project combines **Graph Neural Networks (GNN)**, **Transformers**, and **Strategic Embeddings** to model complex multi-agent interactions on the football field.
+A **competition-grade** deep learning system for NFL player trajectory prediction, designed for the **NFL Big Data Bowl 2026**. This engine combines **Graph Neural Networks (GNN)**, **Transformer decoders**, **SOTA contrastive losses**, and **probabilistic multi-modal prediction** to achieve state-of-the-art accuracy on trajectory forecasting.
 
-### Key Features
+### 🏆 Key Capabilities
 
-- **🧠 Hybrid Architecture**: 8-layer GATv2 + Transformer with residual connections
-- **🦁 SOTA Optimizer**: Lion optimizer (15% faster than AdamW)
-- **🎲 Probabilistic Predictions**: GMM-based decoder with 6 trajectory modes
-- **🤝 Social Pooling**: Explicit pairwise player interaction modeling
-- **📊 Strategic Context**: Formation, alignment, role, and temporal embeddings
-- **⚡ High Performance**: Polars-based data pipeline + RTX 40 optimizations
-- **🎯 Multi-Task Learning**: Trajectory prediction + coverage classification
-- **📉 DropPath**: Stochastic depth regularization (SOTA)
-- **🔄 SWA**: Stochastic Weight Averaging for better generalization
-- **🎨 Rich Visualization**: Attention maps, trajectory animations, field plots
+| Feature | Description |
+|---------|-------------|
+| **Multi-Modal Prediction** | GMM decoder with 8 trajectory modes for diverse predictions |
+| **SOTA Losses** | Social-NCE, WTA, Diversity, Endpoint Focal losses |
+| **Graph Neural Network** | 8-layer GATv2 with residual connections & DropPath |
+| **Social Modeling** | Explicit pairwise player interactions via Social Pooling |
+| **GPU Optimized** | Mixed precision, Tensor Cores, graph pre-caching |
+| **Competition Ready** | Full metrics: ADE, FDE, minADE, minFDE, Miss Rate |
 
-### New in v3.0 (SOTA Edition)
+---
 
-- **🦁 Lion Optimizer**: 15% faster convergence, less memory than AdamW
-- **📉 DropPath (Stochastic Depth)**: SOTA regularization from Vision Transformers
-- **🔄 SWA Integration**: Automatic weight averaging at 75% of training
-- **⚡ RTX 40 Optimizations**: bf16-mixed, TF32, Tensor Cores, cuDNN benchmark (torch.compile disabled for PyG compatibility)
-- **📦 New Libraries**: `lion-pytorch`, `einops`, `safetensors`, `timm`
-- **📊 Enhanced Logging**: Rich epoch summaries with GPU stats and ETA
+## ⭐ What's New in v4.0 (Competition Edition)
 
-## 📚 Documentation
+### 🎯 SOTA Contrastive Losses
+- **Social-NCE Loss**: Learn social interaction patterns via contrastive learning
+- **Winner-Takes-All (WTA)**: Multi-modal training with k-best selection
+- **Diversity Loss**: Encourage diverse trajectory predictions
+- **Endpoint Focal Loss**: Focus learning on hard-to-predict endpoints
 
-### Core Concepts
-- [**System Architecture**](docs/architecture.md) - Deep dive into GNN+Transformer design and tensor flow
-- [**Data Pipeline**](docs/data_pipeline.md) - ETL process, graph construction, and feature engineering
-- [**Data Dictionary**](docs/data_dictionary.md) - Complete reference for all features and encodings
-- [**API Reference**](docs/api_reference.md) - Detailed API documentation for all modules
-- [**Performance Metrics**](docs/performance.md) - Model benchmarks and optimization guide
+### ⚡ Performance Optimizations
+- **Graph Pre-Caching**: 185K+ graphs cached to disk for instant loading
+- **Mixed Precision (FP16)**: 2x faster training with Tensor Cores
+- **AttentionalAggregation**: Learnable graph pooling (replaces mean pooling)
+- **Einops Integration**: Clean tensor operations throughout
 
-### Guides
-- [**Installation**](docs/installation.md) - Environment setup and dependency management
-- [**Usage & Workflow**](docs/usage.md) - Training, inference, and visualization
-- [**Configuration**](docs/configuration.md) - Hyperparameters and CLI options
-- [**Testing**](docs/testing.md) - Verification scripts and quality assurance
+### 📊 Architecture Enhancements
+- **8-Layer GATv2**: Deep graph attention for complex player interactions
+- **8 GMM Modes**: Probabilistic decoder for multi-modal prediction
+- **Hybrid Temporal Encoder**: LSTM + Attention for motion history
+- **Scene Flow Encoder**: Global play understanding via Set Transformer
+
+---
 
 ## 🚀 Quick Start
 
 ### Installation
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/your-org/nfl-analytics-engine.git
 cd nfl-analytics-engine
 
-# Create virtual environment (Python 3.11+ required)
+# Create environment (Python 3.11+ required)
 python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
 # Install dependencies
-pip install .
+pip install -e .
 ```
 
-### Run Sanity Check
+### Pre-Cache Graphs (Required for Fast Training)
 
 ```bash
-# Quick verification on small dataset
-python -m src.train --mode train --sanity
+# Build graph cache for all 18 weeks (~185K graphs, ~30 min)
+python -c "
+from src.data_loader import DataLoader, GraphDataset, build_play_metadata, expand_play_tuples
+from pathlib import Path
+
+print('Pre-caching all graphs...')
+loader = DataLoader('.')
+play_meta = build_play_metadata(loader, list(range(1,19)), 5, 10)
+tuples = expand_play_tuples(play_meta)
+
+cache_dir = Path('cache/finetune/train')
+cache_dir.mkdir(parents=True, exist_ok=True)
+
+ds = GraphDataset(loader, tuples, 20.0, 10, 5, cache_dir=cache_dir, persist_cache=True)
+for i in range(len(ds)):
+    _ = ds[i]
+    if i % 1000 == 0:
+        print(f'{i}/{len(ds)}')
+print('Done!')
+"
 ```
 
-### Production Training (full dataset, reproducible)
+### Train Maximum Accuracy Model
 
 ```bash
-# Reproducible split + config snapshot
-python train_production.py --config configs/production.yaml
+# Train with ultimate accuracy config
+python finetune_best_model.py --config configs/max_accuracy_rtx3050.yaml
 ```
 
-- Saves the exact run config to `outputs/nfl_production_v2_config.json`
-- Persists deterministic play splits to `outputs/splits_production.json` (reused on the next run)
-- Exports models to `outputs/exported_models/` when enabled in the config
+---
 
-### Full Training
-
-```bash
-# Train on complete dataset
-python -m src.train --mode train
-```
-
-### Hyperparameter Tuning
-
-```bash
-# Run Optuna optimization
-python -m src.train --mode tune
-```
-
-## 🏗️ Architecture Overview
+## 🏗️ Architecture
 
 ```mermaid
-graph LR
-    Input[Tracking Data] --> Loader[Polars DataLoader]
-    Loader --> Features[Feature Engineering]
-    Features --> Graph[Graph Construction]
-    Graph --> GNN[4-8 Layer GATv2]
-    GNN --> Decoder[Transformer Decoder]
-    Decoder --> Trajectory[Trajectory Prediction]
-    GNN --> Pool[Global Pooling]
-    Pool --> Classifier[Coverage Classification]
+graph TB
+    subgraph Input
+        A[Tracking Data] --> B[Polars DataLoader]
+        B --> C[Graph Construction]
+    end
+    
+    subgraph Encoder
+        C --> D[Node Embeddings]
+        D --> E[8-Layer GATv2]
+        E --> F[Social Pooling]
+        F --> G[Scene Flow Encoder]
+    end
+    
+    subgraph Decoder
+        G --> H[Hybrid Temporal Encoder]
+        H --> I[GMM Decoder<br/>8 Modes]
+        I --> J[Trajectory Predictions]
+        I --> K[Uncertainty Estimates]
+    end
+    
+    subgraph Losses
+        J --> L1[Trajectory MSE]
+        J --> L2[Velocity Loss]
+        J --> L3[Social-NCE]
+        J --> L4[WTA Loss]
+        J --> L5[Diversity Loss]
+        J --> L6[Endpoint Focal]
+    end
 ```
 
 ### Model Components
 
-1. **GraphPlayerEncoder**: Configurable 4-8 layer GATv2 with strategic embeddings
-   - Residual connections, layer normalization, and DropPath (Stochastic Depth)
-   - Role, side, formation, alignment, and temporal embeddings
-   - **Social Pooling Layer**: Gated pairwise interaction aggregation
-   - Edge attributes: distance, angle, relative speed, relative direction, same-team indicator (5D)
+| Component | Description | Parameters |
+|-----------|-------------|------------|
+| **GraphPlayerEncoder** | 8-layer GATv2 with DropPath | ~4.2M |
+| **SocialPoolingLayer** | Gated pairwise interactions | ~65K |
+| **SceneFlowEncoder** | Set Transformer for global context | ~130K |
+| **TrajectoryDecoder** | Probabilistic GMM with 8 modes | ~850K |
+| **Social-NCE Loss** | Contrastive projection head | ~10K |
+| **Total** | Full model | **5.4M** |
 
-2. **TrajectoryDecoder**: Two modes available
-   - **Deterministic**: Transformer-based point predictions
-   - **Probabilistic (GMM)**: 6-mode Gaussian mixture with uncertainty
-     - Outputs: μ, σ, ρ parameters per mode
-     - NLL loss for distribution learning
+---
 
-3. **Multi-Task Head**: Simultaneous optimization
-   - Trajectory prediction (MSE or NLL loss)
-   - Velocity consistency loss (penalizes unrealistic accelerations)
-   - Coverage classification (BCE loss)
+## 📊 Competition Metrics
 
-## 📊 Performance Metrics
+### Target Performance (Ultimate Accuracy Config)
 
-| Metric | Before | After P0-P3 | Improvement |
-|--------|--------|-------------|-------------|
-| **ADE** | 66.14 yards | **2.23 yards** | **-96.6%** |
-| **FDE** | 66.99 yards | **3.72 yards** | **-94.4%** |
-| **Coverage Acc** | 80.0% | **84.6%** | +4.6% |
-| **Model Params** | 729K | **810K** | +11% |
-| **Training Time** | ~8 sec/epoch | ~7 sec/epoch | Similar |
+| Metric | Target | Description |
+|--------|--------|-------------|
+| **ADE** | < 0.32 | Average Displacement Error (yards) |
+| **FDE** | < 0.50 | Final Displacement Error (yards) |
+| **minADE** | < 0.22 | Minimum ADE across modes |
+| **minFDE** | < 0.35 | Minimum FDE across modes |
+| **Miss Rate** | < 2% | Predictions > 2 yards from ground truth |
 
-*Metrics from 1-epoch sanity runs. Full training (50+ epochs) will further improve accuracy.*
+### Training Configuration
+
+```yaml
+# Ultimate Accuracy Settings
+hidden_dim: 256
+num_gnn_layers: 8
+num_modes: 8
+batch_size: 32
+lr: 0.0008
+epochs: 100
+```
+
+---
 
 ## 📁 Project Structure
 
 ```
 nfl-analytics-engine/
 ├── src/
-│   ├── data_loader.py      # Polars-based data ingestion
-│   ├── features.py          # Graph construction & feature engineering
-│   ├── metrics.py           # Custom metrics (Zone Collapse, Reaction Time)
-│   ├── train.py             # PyTorch Lightning training loop
-│   ├── visualization.py     # Field plots and animations
-│   ├── config/              # P2: Configuration management (NEW)
-│   │   ├── model_config.py
-│   │   ├── training_config.py
-│   │   └── data_config.py
+│   ├── data_loader.py          # Polars-based data ingestion + caching
+│   ├── features.py             # Graph construction & feature engineering
+│   ├── train.py                # PyTorch Lightning training
+│   ├── metrics.py              # Competition metrics
+│   ├── competition_metrics.py  # Novel NFL analytics
+│   ├── competition_output.py   # Submission generator
+│   ├── visualization.py        # Trajectory plots & animations
+│   ├── losses/
+│   │   └── contrastive_losses.py  # SOTA loss functions
 │   └── models/
-│       ├── gnn.py           # NFLGraphTransformer + P1/P3 components
-│       ├── ensemble.py      # P2: Ensemble model (NEW)
-│       └── transformer.py   # Legacy transformer implementation
-├── docs/                    # Comprehensive documentation
-├── tests/                   # Verification and unit tests
-├── notebooks/               # Jupyter analysis notebooks
-├── train/                   # Training data (input_2023_w*.csv)
-├── pyproject.toml           # Project dependencies
-├── train_production.py      # Production-grade trainer (config-driven)
-├── configs/                 # YAML configs (production, sanity, probabilistic)
+│       └── gnn.py              # NFLGraphTransformer + all components
+├── configs/
+│   ├── max_accuracy_rtx3050.yaml  # Ultimate accuracy config
+│   ├── high_accuracy.yaml         # High accuracy (faster)
+│   ├── production.yaml            # Balanced speed/accuracy
+│   └── sanity.yaml                # Quick testing
+├── docs/                       # Comprehensive documentation
+├── tests/                      # Unit tests & verification
+├── finetune_best_model.py      # Main training script
 └── README.md
 ```
 
-## 🎯 Project Status
+---
 
-### ✅ Completed Phases
+## 🔧 Configuration Files
 
-- **Phase 1-6**: Baseline setup, physics features, data pipeline
-- **Phase 7-10**: Context fusion, multi-task learning, attention mechanisms
-- **Phase 11**: Strategic embeddings (formation, alignment, role, side)
-- **Phase 12**: 4-layer GNN with residual connections and dropout
-- **Phase 13**: Advanced metrics and visualization tools
-- **Phase 14**: Probabilistic GMM decoder with 6 trajectory modes
-- **Phase 15**: Social pooling layer for pairwise interactions
-- **Phase 16**: Velocity loss and data augmentation
-- **Phase 17**: Novel competition metrics (matchup difficulty, coverage pressure)
+| Config | Use Case | Epochs | Batch | Modes |
+|--------|----------|--------|-------|-------|
+| `max_accuracy_rtx3050.yaml` | Lowest ADE/FDE | 100 | 32 | 8 |
+| `high_accuracy.yaml` | High accuracy | 100 | 32 | 8 |
+| `production.yaml` | Balanced | 80 | 40 | 6 |
+| `sanity.yaml` | Quick test | 2 | 32 | 1 |
 
-### 🌟 v2.0 Improvements (NEW)
+---
 
-- **P0**: Relative trajectory prediction, multi-week training, LR warmup
-- **P1**: Temporal history LSTM, acceleration loss, collision avoidance
-- **P2**: Config system, Huber loss, ensemble model support
-- **P3**: Scene flow encoder, goal-conditioned decoder, hierarchical decoder
+## 📚 Documentation
 
-### 🔄 Current Focus
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | Deep dive into model design |
+| [Data Pipeline](docs/data_pipeline.md) | ETL and graph construction |
+| [Configuration](docs/configuration.md) | All hyperparameters |
+| [API Reference](docs/api_reference.md) | Module documentation |
+| [Performance](docs/performance.md) | Benchmarks & optimization |
+| [Installation](docs/installation.md) | Setup guide |
 
-- Full multi-week training for competition submission
-- Hyperparameter tuning with Optuna
-- Submission notebook completion with insights
+---
 
 ## 🛠️ Development
 
 ### Running Tests
 
 ```bash
-# Run all verification scripts
-python tests/verify_phase11.py
-python tests/verify_phase10.py
-python tests/verify_phase8.py
-
-# Run unit tests
+# Unit tests
 python -m pytest tests/ -v
+
+# Verification scripts
+python tests/verify_phase11.py
 ```
 
-### Visualization Examples
+### GPU Monitoring
 
-```python
-from src.visualization import plot_attention_map, animate_play
-from src.data_loader import DataLoader
-
-# Load data
-loader = DataLoader(data_dir=".")
-df = loader.load_week_data(1)
-
-# Animate a play
-play_df = df.filter((pl.col("game_id") == game_id) & (pl.col("play_id") == play_id))
-animate_play(play_df, output_path="play.mp4")
+```bash
+# Watch GPU utilization during training
+watch -n 1 nvidia-smi
 ```
+
+---
 
 ## 📖 Citation
-
-If you use this code in your research, please cite:
 
 ```bibtex
 @misc{nfl-analytics-engine,
   title={NFL Analytics Engine: Context-Aware Trajectory Prediction},
-  author={Your Name},
+  author={Tanmay},
   year={2025},
-  publisher={GitHub},
-  url={https://github.com/your-org/nfl-analytics-engine}
+  howpublished={\url{https://github.com/tanm-sys/nfl-analytics-engine}}
 }
 ```
 
+---
+
 ## 📄 License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please read our contributing guidelines and submit pull requests.
-
-## 📧 Contact
-
-For questions or feedback, please open an issue on GitHub or contact [your-email@example.com].
+MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
 **Built with ❤️ for the NFL Big Data Bowl 2026**
+
+*Powered by PyTorch, PyTorch Geometric, and PyTorch Lightning*

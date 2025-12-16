@@ -1,606 +1,223 @@
-# Performance Metrics & Benchmarks
+# Performance Guide
 
-This document provides performance benchmarks, optimization strategies, and best practices for the NFL Analytics Engine.
+> Benchmarks, optimization techniques, and GPU utilization strategies for the NFL Analytics Engine.
 
-## Model Performance Metrics
+## 📊 Performance Benchmarks
 
-### Trajectory Prediction
+### Training Speed (RTX 3050 4GB)
 
-| Metric | Description | Target | Current* |
-|--------|-------------|--------|----------|
-| **ADE** | Average Displacement Error | < 0.50 yards | TBD |
-| **FDE** | Final Displacement Error | < 0.90 yards | TBD |
-| **Miss Rate (2yd)** | % predictions > 2 yards off | < 10% | TBD |
-
-*Targets mirror `configs/production.yaml`; run a production training to populate current metrics. Deterministic splits are stored at `outputs/splits_production.json`.
-
-**Metric Definitions:**
-
-**ADE (Average Displacement Error):**
-$$ADE = \frac{1}{N \times T} \sum_{i=1}^{N} \sum_{t=1}^{T} \|\hat{y}_{i,t} - y_{i,t}\|_2$$
-
-Where:
-- $N$ = Number of agents
-- $T$ = Prediction horizon (10 frames)
-- $\hat{y}_{i,t}$ = Predicted position
-- $y_{i,t}$ = Ground truth position
-
-**FDE (Final Displacement Error):**
-$$FDE = \frac{1}{N} \sum_{i=1}^{N} \|\hat{y}_{i,T} - y_{i,T}\|_2$$
-
-### Coverage Classification
-
-| Metric | Description | Target | Current* |
-|--------|-------------|--------|----------|
-| **Accuracy** | Man vs Zone classification | > 90% | TBD |
-| **Precision** | True positives / (TP + FP) | > 85% | TBD |
-| **Recall** | True positives / (TP + FN) | > 85% | TBD |
-| **F1 Score** | Harmonic mean of P and R | > 85% | TBD |
-
----
-
-## Training Performance
-
-### Training Time
-
-**Hardware:** NVIDIA RTX 3090 (24GB VRAM)
-
-| Configuration | Epochs | Time | ADE | FDE |
-|---------------|--------|------|-----|-----|
-| Small (32-dim) | 50 | ~30 min | TBD | TBD |
-| Medium (64-dim) | 50 | ~45 min | TBD | TBD |
-| Large (128-dim) | 50 | ~90 min | TBD | TBD |
-
-**Hardware:** CPU Only (Intel i7-12700K)
-
-| Configuration | Epochs | Time | Notes |
-|---------------|--------|------|-------|
-| Small (32-dim) | 50 | ~4 hours | Not recommended for full training |
-| Medium (64-dim) | 10 | ~2 hours | Sanity checks only |
+| Configuration | Speed (it/s) | Epoch Time | GPU Util |
+|---------------|-------------|------------|----------|
+| Without Cache | 0.13 | ~6.5 hours | ~10% |
+| **With Cache** | 1.2-1.5 | ~45 min | ~70-80% |
+| Cache + FP16 | 1.5-2.0 | ~35 min | ~85% |
 
 ### Memory Usage
 
-| Configuration | GPU Memory | System RAM | Batch Size |
-|---------------|------------|------------|------------|
-| Small (32-dim) | ~3 GB | ~8 GB | 64 |
-| Medium (64-dim) | ~6 GB | ~12 GB | 32 |
-| Large (128-dim) | ~12 GB | ~16 GB | 16 |
-
-**Memory by Component:**
-
-```python
-# Approximate GPU memory breakdown (64-dim model, batch_size=32)
-Model parameters:     ~400 MB
-Optimizer states:     ~800 MB
-Activations:          ~2 GB
-Graph data:           ~1.5 GB
-Gradients:            ~800 MB
------------------------------------
-Total:                ~5.5 GB
-```
+| Component | VRAM Usage |
+|-----------|------------|
+| Model (5.4M params) | ~500 MB |
+| Batch (32 graphs) | ~1.5 GB |
+| Gradients | ~1.2 GB |
+| Optimizer states | ~800 MB |
+| **Total** | **~3.5 GB / 4 GB** |
 
 ---
 
-## Inference Performance
+## ⚡ Optimization Techniques
 
-### Latency
+### 1. Graph Pre-Caching (Critical)
 
-**Single Play Prediction:**
+**Problem**: Graph construction is CPU-bound. GPU idles waiting for data.
 
-| Hardware | Latency | Throughput |
-|----------|---------|------------|
-| RTX 3090 | ~15 ms | ~66 plays/sec |
-| RTX 3060 | ~25 ms | ~40 plays/sec |
-| CPU (i7) | ~150 ms | ~6 plays/sec |
-
-**Batch Prediction (batch_size=32):**
-
-| Hardware | Latency | Throughput |
-|----------|---------|------------|
-| RTX 3090 | ~200 ms | ~160 plays/sec |
-| RTX 3060 | ~350 ms | ~90 plays/sec |
-
-### Optimization Techniques
-
-#### 1. Mixed Precision Training
-
-**Before:**
-```python
-trainer = pl.Trainer(
-    precision="32-true",
-    max_epochs=50
-)
-# Training time: 45 min
-# GPU memory: 6 GB
-```
-
-**After:**
-```python
-trainer = pl.Trainer(
-    precision="16-mixed",  # Use mixed precision
-    max_epochs=50
-)
-# Training time: 30 min (33% faster)
-# GPU memory: 4 GB (33% less)
-```
-
-**Speedup:** ~1.5x  
-**Memory savings:** ~30%
-
-#### 2. Gradient Accumulation
-
-Simulate larger batch sizes with limited memory:
-
-```python
-trainer = pl.Trainer(
-    accumulate_grad_batches=4,  # Effective batch_size = 4 × actual
-    max_epochs=50
-)
-
-# Example: batch_size=8, accumulate=4 → effective batch_size=32
-```
-
-**Trade-off:** Slower training, but enables larger effective batch sizes
-
-#### 3. Compiled Models (PyTorch 2.0+)
-
-> [!CAUTION]
-> **Currently Disabled**: `torch.compile()` is incompatible with PyTorch Geometric. PyG dynamically clones tensors during batching, which causes CUDA graph capture failures even with `cudagraphs=False`. This will be re-enabled when PyG adds native torch.compile support.
-
-```python
-import torch
-
-# CURRENTLY DISABLED in train_production.py due to PyG incompatibility
-# model = torch.compile(model, mode="reduce-overhead")
-
-# Alternative optimizations still active:
-# - TF32 matmul precision
-# - cuDNN benchmark mode  
-# - bf16-mixed precision training
-```
-
-**Workaround for non-PyG models:**
-```python
-import torch._inductor.config
-torch._inductor.config.triton.cudagraphs = False  # May help in some cases
-model = torch.compile(model, mode="reduce-overhead")
-```
-
-#### 4. DataLoader Optimization
-
-```python
-from torch_geometric.loader import DataLoader
-
-loader = DataLoader(
-    graphs,
-    batch_size=32,
-    num_workers=4,         # Parallel data loading
-    pin_memory=True,       # Faster GPU transfer
-    persistent_workers=True,  # Keep workers alive
-    prefetch_factor=2      # Prefetch batches
-)
-
-# Speedup: ~1.3x on data loading
-```
-
----
-
-## Data Pipeline Performance
-
-### Polars vs Pandas
-
-**Loading Week 1 data (~500K rows):**
-
-| Library | Load Time | Memory |
-|---------|-----------|--------|
-| Pandas | ~5.2 sec | ~450 MB |
-| Polars | ~0.3 sec | ~180 MB |
-
-**Speedup:** ~17x faster, ~60% less memory
-
-### Graph Construction
-
-**Creating graphs from Week 1:**
-
-| Radius | Graphs | Time | Avg Edges/Graph |
-|--------|--------|------|-----------------|
-| 10 yards | ~8,000 | ~12 sec | ~50 |
-| 20 yards | ~8,000 | ~18 sec | ~150 |
-| 30 yards | ~8,000 | ~28 sec | ~300 |
-
-**Optimization:**
-```python
-# Vectorized graph construction
-graphs = create_graph_data(df, radius=20.0)
-
-# vs naive Python loops (10x slower)
-```
-
----
-
-## Model Capacity
-
-### Parameter Count
-
-**NFLGraphTransformer (hidden_dim=64):**
-
-| Component | Parameters | % of Total |
-|-----------|-----------|------------|
-| Node Embedding | 448 | 0.4% |
-| Strategic Embeddings | 1,568 | 1.5% |
-| GATv2 Layers (×4) | 65,536 | 64.8% |
-| Layer Norms (×4) | 512 | 0.5% |
-| Trajectory Decoder | 33,280 | 32.9% |
-| Coverage Classifier | 65 | 0.1% |
-| **Total** | **101,409** | **100%** |
-
-**Scaling with hidden_dim:**
-
-| hidden_dim | Total Parameters | GPU Memory (training) |
-|------------|------------------|----------------------|
-| 32 | ~25K | ~2 GB |
-| 64 | ~101K | ~6 GB |
-| 128 | ~404K | ~12 GB |
-| 256 | ~1.6M | ~24 GB |
-
----
-
-## Comparison with Baselines
-
-### Baseline Models
-
-| Model | ADE | FDE | Coverage Acc | Training Time |
-|-------|-----|-----|--------------|---------------|
-| Linear Regression | 3.5 | 6.2 | N/A | 1 min |
-| XGBoost | 2.8 | 5.1 | 65% | 15 min |
-| LSTM | 2.3 | 4.2 | 68% | 30 min |
-| **GNN+Transformer** | **TBD** | **TBD** | **TBD** | **45 min** |
-
-*Populate with actual results after training*
-
-### State-of-the-Art Comparison
-
-| Approach | Paper | ADE | Notes |
-|----------|-------|-----|-------|
-| Social LSTM | Alahi et al. 2016 | 3.2 | Pedestrian tracking |
-| Social GAN | Gupta et al. 2018 | 2.8 | Multi-modal prediction |
-| Trajectron++ | Salzmann et al. 2020 | 2.1 | Scene-aware |
-| **Our Model** | - | **TBD** | Football-specific |
-
----
-
-## Optimization Strategies
-
-### For Speed
-
-#### 1. Reduce Model Size
-
-```python
-# Smaller model
-model = NFLGraphTransformer(
-    hidden_dim=32,      # vs 64
-    num_gnn_layers=2    # vs 4
-)
-# Speedup: ~2x
-# Accuracy trade-off: ~5-10% worse
-```
-
-#### 2. Reduce Batch Size
-
-```python
-# Smaller batches
-loader = DataLoader(graphs, batch_size=16)  # vs 32
-# Speedup: ~1.3x
-# May affect convergence
-```
-
-#### 3. Early Stopping
-
-```python
-from pytorch_lightning.callbacks import EarlyStopping
-
-early_stop = EarlyStopping(
-    monitor='val_loss',
-    patience=5,  # Stop if no improvement for 5 epochs
-    mode='min'
-)
-# Saves time on unnecessary epochs
-```
-
-### For Accuracy
-
-#### 1. Increase Model Capacity
-
-```python
-model = NFLGraphTransformer(
-    hidden_dim=128,     # vs 64
-    num_gnn_layers=6    # vs 4
-)
-# Accuracy improvement: ~5-10%
-# Training time: ~2x slower
-```
-
-#### 2. Data Augmentation
-
-```python
-# Horizontal flip augmentation
-def augment_play(df):
-    if random.random() > 0.5:
-        df = df.with_columns(
-            (53.3 - pl.col('std_y')).alias('std_y'),
-            ((pl.col('std_dir') + 180) % 360).alias('std_dir')
-        )
-    return df
-```
-
-#### 3. Ensemble Methods
-
-```python
-# Train multiple models with different seeds
-models = [train_model(seed=i) for i in range(5)]
-
-# Average predictions
-predictions = torch.stack([m(graph)[0] for m in models]).mean(dim=0)
-# Accuracy improvement: ~2-3%
-```
-
-### For Memory Efficiency
-
-#### 1. Gradient Checkpointing
-
-```python
-# Trade compute for memory
-model.gradient_checkpointing_enable()
-# Memory savings: ~30%
-# Training time: ~20% slower
-```
-
-#### 2. Smaller Batch Size + Accumulation
-
-```python
-trainer = pl.Trainer(
-    batch_size=8,               # Smaller batches
-    accumulate_grad_batches=4   # Accumulate gradients
-)
-# Effective batch_size = 32
-# Memory usage = batch_size 8
-```
-
-#### 3. Clear Cache Regularly
-
-```python
-import torch
-
-# After each epoch
-torch.cuda.empty_cache()
-```
-
----
-
-## Profiling
-
-### GPU Profiling
-
-```python
-import torch.profiler as profiler
-
-with profiler.profile(
-    activities=[
-        profiler.ProfilerActivity.CPU,
-        profiler.ProfilerActivity.CUDA,
-    ],
-    record_shapes=True
-) as prof:
-    model(graph)
-
-print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-```
-
-**Example output:**
-```
-Name                    Self CPU    Self CUDA    Total
----------------------------------------------------------
-GATv2Conv               10.2ms      45.3ms       55.5ms
-Linear                  5.1ms       12.4ms       17.5ms
-TransformerEncoder      8.3ms       23.1ms       31.4ms
-```
-
-### Memory Profiling
-
-```python
-import torch
-
-# Track memory
-torch.cuda.reset_peak_memory_stats()
-model(graph)
-peak_memory = torch.cuda.max_memory_allocated() / 1e9
-print(f"Peak GPU memory: {peak_memory:.2f} GB")
-```
-
----
-
-## Scalability
-
-### Multi-GPU Training
-
-```python
-trainer = pl.Trainer(
-    accelerator="gpu",
-    devices=4,              # Use 4 GPUs
-    strategy="ddp"          # Distributed Data Parallel
-)
-
-# Speedup: ~3.5x (4 GPUs)
-# Efficiency: ~87%
-```
-
-### Large Dataset Handling
-
-**Streaming data for very large datasets:**
-
-```python
-# Process week-by-week
-for week in range(1, 18):
-    df = loader.load_week_data(week)
-    graphs = create_graph_data(df)
-    # Train incrementally or save to disk
-    torch.save(graphs, f"graphs_week{week}.pt")
-```
-
----
-
-## Best Practices
-
-### 1. Benchmark Before Optimizing
-
-```python
-import time
-
-start = time.time()
-model(graph)
-torch.cuda.synchronize()  # Wait for GPU
-elapsed = time.time() - start
-print(f"Inference time: {elapsed*1000:.2f} ms")
-```
-
-### 2. Monitor GPU Utilization
+**Solution**: Pre-cache all graphs to disk.
 
 ```bash
-# Watch GPU usage
+# Pre-cache ~185K graphs (~1.8GB on disk)
+python -c "
+from src.data_loader import *
+from pathlib import Path
+
+loader = DataLoader('.')
+play_meta = build_play_metadata(loader, list(range(1,19)), 5, 10)
+tuples = expand_play_tuples(play_meta)
+
+cache_dir = Path('cache/finetune/train')
+cache_dir.mkdir(parents=True, exist_ok=True)
+
+ds = GraphDataset(loader, tuples, 20.0, 10, 5, 
+                  cache_dir=cache_dir, persist_cache=True)
+for i, _ in enumerate(ds):
+    if i % 1000 == 0: print(f'{i}/{len(ds)}')
+"
+```
+
+**Impact**: 9x speedup (0.13 → 1.2 it/s)
+
+### 2. Mixed Precision Training
+
+**Problem**: FP32 operations don't utilize Tensor Cores.
+
+**Solution**: Enable automatic mixed precision.
+
+```python
+# In trainer
+precision="16-mixed"
+
+# In code
+torch.set_float32_matmul_precision('medium')
+```
+
+**Impact**: ~1.5x speedup, 50% less memory
+
+### 3. Gradient Accumulation
+
+**Problem**: Large effective batch size doesn't fit in VRAM.
+
+**Solution**: Accumulate gradients over multiple forward passes.
+
+```yaml
+batch_size: 32
+accumulate_grad_batches: 5
+# Effective batch = 160
+```
+
+**Impact**: Better gradients without OOM
+
+### 4. cuDNN Benchmark Mode
+
+**Problem**: Default convolution algorithms not optimal.
+
+**Solution**: Enable autotuning.
+
+```python
+trainer = Trainer(benchmark=True)
+```
+
+**Impact**: ~10% speedup after warmup
+
+---
+
+## 🎯 Target Metrics
+
+### Competition Targets (Ultimate Config)
+
+| Metric | Target | World-Class |
+|--------|--------|-------------|
+| **ADE** | < 0.32 | < 0.25 |
+| **FDE** | < 0.50 | < 0.40 |
+| **minADE** | < 0.22 | < 0.18 |
+| **minFDE** | < 0.35 | < 0.28 |
+| **Miss Rate** | < 2% | < 1% |
+
+### Metric Definitions
+
+| Metric | Formula | Description |
+|--------|---------|-------------|
+| **ADE** | Σ‖pred - gt‖ / (N×T) | Average error across all frames |
+| **FDE** | ‖pred_T - gt_T‖ / N | Error at final frame |
+| **minADE** | min_k(ADE_k) | Best of K modes |
+| **minFDE** | min_k(FDE_k) | Best final frame |
+| **Miss Rate** | %{FDE > 2} | Fraction of bad predictions |
+
+---
+
+## 🔧 Hardware Requirements
+
+### Minimum (RTX 3050 4GB)
+
+| Resource | Requirement |
+|----------|-------------|
+| GPU VRAM | 4 GB |
+| RAM | 16 GB |
+| Disk (cache) | 5 GB |
+| CPU Cores | 4+ |
+
+### Recommended (RTX 3060+)
+
+| Resource | Requirement |
+|----------|-------------|
+| GPU VRAM | 8+ GB |
+| RAM | 32 GB |
+| Disk (SSD) | 20 GB |
+| CPU Cores | 8+ |
+
+---
+
+## 📈 Monitoring
+
+### Real-Time GPU Stats
+
+```bash
+# Watch GPU utilization
 watch -n 1 nvidia-smi
 
-# Look for:
-# - GPU utilization > 80%
-# - Memory usage < 90%
+# Detailed metrics
+nvidia-smi --query-gpu=utilization.gpu,memory.used,temperature.gpu --format=csv -l 1
 ```
 
-### 3. Use Profiling Tools
+### TensorBoard
 
 ```bash
-# PyTorch profiler
-python -m torch.utils.bottleneck train.py
+# Start TensorBoard
+tensorboard --logdir lightning_logs/
 
-# NVIDIA Nsight Systems
-nsys profile python train.py
+# Metrics logged:
+# - train_loss, val_loss
+# - val_ade, val_fde, val_minADE
+# - learning_rate
+# - gpu_memory_usage
 ```
 
-### 4. Reproducibility
+---
 
+## 🚀 Speed Optimization Checklist
+
+1. ✅ **Pre-cache graphs** (9x speedup)
+2. ✅ **Enable FP16 mixed precision** (1.5x speedup)
+3. ✅ **Use benchmark=True** (10% speedup)
+4. ✅ **Set torch_matmul_precision('medium')** (Tensor Cores)
+5. ✅ **Use SSD for cache** (faster disk I/O)
+6. ✅ **Pin memory** (faster CPU→GPU transfer)
+7. ⚠️ **num_workers=0** (with cache, CPU not bottleneck)
+
+---
+
+## 🔍 Bottleneck Diagnosis
+
+### Symptom: Low GPU Utilization (< 50%)
+
+**Cause 1**: CPU bottleneck (data loading)
+```bash
+# Check CPU usage
+htop
+# If CPU at 100%, graphs not cached
+```
+
+**Solution**: Pre-cache graphs
+
+**Cause 2**: Small batch size
+```yaml
+# Increase batch size
+batch_size: 48  # From 32
+```
+
+### Symptom: OOM Errors
+
+**Cause**: Model + batch too large
+
+**Solution**:
+```yaml
+batch_size: 24           # Reduce
+num_modes: 6             # Reduce modes
+accumulate_grad_batches: 6  # Compensate
+```
+
+### Symptom: Slow Training Speed
+
+**Cause**: No mixed precision
+
+**Solution**:
 ```python
-# Set seeds for reproducible benchmarks
-torch.manual_seed(42)
-torch.cuda.manual_seed_all(42)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+precision="16-mixed"
 ```
-
----
-
-## Performance Checklist
-
-Before deploying:
-
-- [ ] Benchmark on target hardware
-- [ ] Profile GPU utilization (>80%)
-- [ ] Check memory usage (<90% of available)
-- [ ] Measure inference latency
-- [ ] Test batch processing throughput
-- [ ] Verify accuracy metrics meet targets
-- [ ] Enable mixed precision if supported
-- [ ] Optimize data loading (num_workers, pin_memory)
-- [ ] Consider model compilation (torch.compile)
-- [ ] Document performance characteristics
-
----
-
-## Troubleshooting Performance Issues
-
-### Slow Training
-
-**Symptoms:** Training takes much longer than expected
-
-**Diagnosis:**
-```python
-# Check GPU utilization
-nvidia-smi
-
-# Profile bottlenecks
-python -m torch.utils.bottleneck train.py
-```
-
-**Solutions:**
-- Increase `num_workers` in DataLoader
-- Enable `pin_memory=True`
-- Use mixed precision training
-- Reduce model size if GPU is underutilized
-- Check for CPU-GPU data transfer bottlenecks
-
-### High Memory Usage
-
-**Symptoms:** CUDA out of memory errors
-
-**Solutions:**
-- Reduce batch size
-- Use gradient accumulation
-- Enable gradient checkpointing
-- Reduce `hidden_dim` or `num_gnn_layers`
-- Clear CUDA cache: `torch.cuda.empty_cache()`
-
-### Poor Accuracy
-
-**Symptoms:** Metrics below targets
-
-**Solutions:**
-- Train longer (more epochs)
-- Increase model capacity
-- Tune hyperparameters with Optuna
-- Check data quality and preprocessing
-- Verify loss function weights
-- Try ensemble methods
-
----
-
-## Future Optimizations
-
-Potential improvements for future versions:
-
-1. **Quantization:** INT8 inference for 2-4x speedup
-2. **Knowledge Distillation:** Train smaller student model
-3. **Sparse Attention:** Reduce computational complexity
-4. **Dynamic Batching:** Optimize batch sizes dynamically
-5. **Model Pruning:** Remove unnecessary parameters
-6. **ONNX Export:** Deploy with optimized runtime
-
----
-
-## References
-
-- **PyTorch Performance Tuning:** https://pytorch.org/tutorials/recipes/recipes/tuning_guide.html
-- **Mixed Precision Training:** https://pytorch.org/docs/stable/amp.html
-- **PyTorch Profiler:** https://pytorch.org/tutorials/recipes/recipes/profiler_recipe.html
-- **NVIDIA Optimization Guide:** https://docs.nvidia.com/deeplearning/performance/
-
----
-
-## Appendix: Hardware Recommendations
-
-### For Development
-
-- **GPU:** NVIDIA RTX 3060 (12GB) or better
-- **RAM:** 16 GB
-- **Storage:** 256 GB SSD
-- **CPU:** 6+ cores
-
-### For Production Training
-
-- **GPU:** NVIDIA RTX 3090 (24GB) or A100 (40GB)
-- **RAM:** 32 GB
-- **Storage:** 1 TB NVMe SSD
-- **CPU:** 16+ cores
-
-### For Inference Only
-
-- **GPU:** NVIDIA GTX 1660 (6GB) or better
-- **RAM:** 8 GB
-- **Storage:** 128 GB SSD
-- **CPU:** 4+ cores

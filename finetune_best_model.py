@@ -45,15 +45,20 @@ BEST_CHECKPOINT = "checkpoints/nfl_worldclass-epoch=04-val_ade=0.545.ckpt"
 OUTPUT_DIR = Path("checkpoints_finetuned")
 CACHE_DIR = Path("cache/finetune")
 
-# Fine-tuning hyperparameters
+# Fine-tuning hyperparameters - MAXIMUM ACCURACY for RTX 3050 4GB
 FINETUNE_CONFIG = {
-    "lr": 0.0003,              # 5x lower than original (0.0015)
-    "weight_decay": 0.08,       # Increased from 0.05
-    "max_epochs": 10,           # Short fine-tuning
-    "batch_size": 32,           # Keep same
-    "accumulate_grad_batches": 4,  # Effective batch = 128
-    "early_stopping_patience": 3,
+    "lr": 0.001,                # Higher for Lion optimizer
+    "weight_decay": 0.02,
+    "max_epochs": 50,           # More epochs for convergence
+    "batch_size": 24,           # Reduced for larger model
+    "accumulate_grad_batches": 6,  # Effective batch = 144
+    "early_stopping_patience": 10,
     "weeks": list(range(1, 19)),  # All 18 weeks
+    # Model architecture
+    "hidden_dim": 256,
+    "num_gnn_layers": 8,        # Deep network
+    "heads": 8,                 # Max attention heads
+    "num_modes": 8,             # More trajectory diversity
 }
 
 
@@ -146,17 +151,33 @@ def finetune():
     console.print("\n[yellow]Loading base checkpoint...[/yellow]")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Load with strict=False to allow loading old checkpoints without SOTA losses
-    model = NFLGraphPredictor.load_from_checkpoint(
-        BEST_CHECKPOINT,
-        map_location=device,
-        strict=False,  # Allow missing keys for new SOTA loss layers
-        lr=FINETUNE_CONFIG["lr"],
-        weight_decay=FINETUNE_CONFIG["weight_decay"],
-    )
+    # Check if checkpoint exists, otherwise train from scratch
+    if not Path(BEST_CHECKPOINT).exists():
+        console.print(f"[yellow]⚠️ Checkpoint not found: {BEST_CHECKPOINT}[/yellow]")
+        console.print("[cyan]Training MAXIMUM ACCURACY model from scratch...[/cyan]")
+        model = NFLGraphPredictor(
+            input_dim=9,
+            hidden_dim=FINETUNE_CONFIG["hidden_dim"],
+            lr=FINETUNE_CONFIG["lr"],
+            probabilistic=True,
+            num_modes=FINETUNE_CONFIG["num_modes"],
+            use_social_nce=True,
+            use_wta_loss=True,
+            use_diversity_loss=True,
+            use_endpoint_focal=True,
+            weight_decay=FINETUNE_CONFIG["weight_decay"],
+        )
+    else:
+        # Load with strict=False to allow loading old checkpoints without SOTA losses
+        model = NFLGraphPredictor.load_from_checkpoint(
+            BEST_CHECKPOINT,
+            map_location=device,
+            strict=False,  # Allow missing keys for new SOTA loss layers
+            lr=FINETUNE_CONFIG["lr"],
+            weight_decay=FINETUNE_CONFIG["weight_decay"],
+        )
     
     console.print(f"[green]✓ Model loaded: {sum(p.numel() for p in model.parameters()):,} parameters[/green]")
-    console.print("[cyan]  Note: New SOTA loss layers initialized with random weights[/cyan]")
     
     # Create dataloaders
     train_loader, val_loader = create_dataloaders(

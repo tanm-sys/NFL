@@ -1,132 +1,172 @@
 # ============================================================================
-# 🏆 ULTIMATE ACCURACY CONFIG - LOWEST ADE/FDE for RTX 3050 4GB
+# 🏆 ULTIMATE SOTA PARAMETERS - COMPETITION WINNER GRADE
 # ============================================================================
-# Optimized for competition-winning accuracy. Every setting tuned for
-# trajectory prediction quality over training speed.
+# Based on MTR v3 (2024 Waymo 1st Place) and Trajectron++ best practices
+# Optimized for RTX 3050 4GB VRAM with maximum accuracy focus
+#
+# Target Metrics:
+#   - minADE < 0.18 yards
+#   - minFDE < 0.28 yards  
+#   - ADE < 0.28 yards
+#   - Miss Rate < 1%
 
-experiment_name: "nfl_ultimate_accuracy"
-description: "Maximum accuracy for lowest ADE/FDE - competition grade"
+experiment_name: "nfl_sota_winner"
+description: "Competition-winning parameters based on MTR v3 and Trajectron++"
 
-# Data - ALL DATA
+# ============================================================================
+# DATA - FULL DATASET
+# ============================================================================
 data_dir: "."
 weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-radius: 20.0
+radius: 25.0              # Larger radius for more context (MTR uses 16 neighbors)
 future_seq_len: 10
 history_len: 5
 
 # ============================================================================
-# MODEL ARCHITECTURE - OPTIMIZED FOR ACCURACY
+# MODEL ARCHITECTURE - MTR v3 INSPIRED
 # ============================================================================
+# MTR v3: 6 encoder + 6 decoder, hidden_dim=256
 input_dim: 9
-hidden_dim: 256            # Maximum for 4GB VRAM
-num_gnn_layers: 8          # Deep network captures complex interactions
-heads: 8                   # Multi-head attention
-dropout: 0.10              # Moderate dropout
-droppath_rate: 0.12        # Stochastic depth
+hidden_dim: 256           # Same as MTR v3
+num_gnn_layers: 6         # 6 encoder layers (MTR v3)
+num_decoder_layers: 6     # 6 decoder layers (MTR v3)  
+heads: 8                  # Multi-head attention
+dropout: 0.08             # Slightly lower for competition
+droppath_rate: 0.15       # Stochastic depth (aggressive)
 
-# Probabilistic Decoder - KEY FOR LOW minADE/minFDE
+# Probabilistic Multi-Modal Prediction
 probabilistic: true
-num_modes: 8               # More modes = better multi-modal prediction
-                           # Critical for minADE metric
+num_modes: 12             # More modes = better minADE/minFDE
+                          # MTR uses evolving anchors, we use GMM modes
 
 # Advanced Encoders
 use_scene_encoder: true
-temporal_encoder_type: "hybrid"  # LSTM + Attention = best temporal modeling
+temporal_encoder_type: "hybrid"  # LSTM + Attention
+use_goal_decoder: true           # Goal-conditioned (like MTR anchors)
+use_hierarchical_decoder: true   # Coarse-to-fine
 
 # ============================================================================
-# TRAINING - LONGER & MORE CAREFUL
+# TRAINING - COMPETITION GRADE
 # ============================================================================
-batch_size: 32             # Smaller batch for better gradients
-accumulate_grad_batches: 5  # Effective batch = 160
-learning_rate: 0.0008      # Lower LR for stability
-max_epochs: 100            # Long training for convergence
-min_epochs: 30
+batch_size: 24             # Smaller for RTX 3050 with 12 modes
+accumulate_grad_batches: 8  # Effective batch = 192 (large effective batch)
+learning_rate: 0.0001      # MTR uses 1e-4 initial LR
+max_epochs: 150            # Long training for convergence
+min_epochs: 50
 
-# Optimizer
+# Optimizer - AdamW (proven for transformers)
 optimizer: "adamw"
-weight_decay: 0.03         # Strong regularization
+weight_decay: 0.05         # Strong regularization (MTR-style)
 betas: [0.9, 0.999]
 
 # LR Scheduler - Cosine with long warmup
 lr_scheduler: "cosine_warmup"
-warmup_epochs: 8
-min_lr: 1.0e-07
+warmup_epochs: 10          # Longer warmup for stability
+warmup_start_lr: 1.0e-06   # Start very low
+min_lr: 1.0e-08            # Decay to near-zero
 
 # ============================================================================
-# LOSS WEIGHTS - TUNED FOR LOW ADE/FDE
+# LOSS WEIGHTS - OPTIMIZED FOR minADE/minFDE
 # ============================================================================
-# Primary trajectory losses
+# Primary losses
 trajectory_weight: 1.0     # Main MSE loss
-velocity_weight: 0.5       # Smooth trajectories
-acceleration_weight: 0.3   # Physically plausible motion
-collision_weight: 0.15     # Avoid collisions
-coverage_weight: 0.6       # Zone coverage accuracy
+velocity_weight: 0.6       # Higher for smooth trajectories
+acceleration_weight: 0.4   # Physical plausibility  
+collision_weight: 0.20     # Collision avoidance
+coverage_weight: 0.5       # Zone coverage
 
 # ============================================================================
-# SOTA CONTRASTIVE LOSSES - ALL ENABLED
+# SOTA CONTRASTIVE LOSSES - FULL POWER
 # ============================================================================
-use_social_nce: true       # Learn social interactions
-social_nce_weight: 0.15
-social_nce_temperature: 0.07
+# Social-NCE (social interaction learning)
+use_social_nce: true
+social_nce_weight: 0.20    # Higher weight for social learning
+social_nce_temperature: 0.05  # Lower temp = sharper contrast
 
+# Contrastive Learning
 use_contrastive_loss: true
-contrastive_weight: 0.1
+contrastive_weight: 0.15
 
-use_wta_loss: true         # Winner-takes-all for multi-modal
-wta_k_best: 2              # Top-2 modes (better diversity)
+# Winner-Takes-All (multi-modal training)
+use_wta_loss: true
+wta_k_best: 3              # Top-3 modes (more exploration)
+wta_weight: 0.8            # Strong WTA signal
 
-use_diversity_loss: true   # Diverse trajectory predictions
-diversity_weight: 0.04
-diversity_min_distance: 2.0
+# Diversity (mode separation)
+use_diversity_loss: true
+diversity_weight: 0.06     # Higher for distinct modes
+diversity_min_distance: 2.5  # Larger minimum separation
 
-use_endpoint_focal: true   # Focus on hard endpoints
-endpoint_focal_weight: 0.25
-endpoint_focal_gamma: 2.5
+# Endpoint Focal (hard endpoint focus)
+use_endpoint_focal: true
+endpoint_focal_weight: 0.35  # Higher focus on endpoints (FDE)
+endpoint_focal_gamma: 3.0    # Stronger focusing
 
 # ============================================================================
-# REGULARIZATION - STRONG BUT BALANCED
+# ADVANCED REGULARIZATION
 # ============================================================================
-gradient_clip_val: 0.5     # Tight gradient clipping
+gradient_clip_val: 0.3     # Tighter clipping for stability
 use_augmentation: true     # Data augmentation
+augmentation_rotate: true  # Rotation augmentation
+augmentation_flip: true    # Horizontal flip
 use_huber_loss: true       # Robust to outliers
-huber_delta: 0.8
-label_smoothing: 0.08
+huber_delta: 0.5           # Tighter delta
+label_smoothing: 0.05      # Light smoothing
+use_ema: true              # Exponential Moving Average
+ema_decay: 0.999           # EMA decay rate
 
 # ============================================================================
-# HARDWARE
+# HARDWARE - RTX 3050 4GB OPTIMIZED
 # ============================================================================
 precision: "16-mixed"
 accelerator: "gpu"
 devices: 1
 benchmark: true
 deterministic: false
-num_workers: 0             # Use pre-cached graphs
+num_workers: 0             # Pre-cached graphs
 
-# Caching
-in_memory_cache_size: 200  # Large RAM cache
+# Memory optimization
+in_memory_cache_size: 150  # RAM cache
 persist_cache: true
 cache_dir: "cache/finetune/train"
 
 # ============================================================================
-# CALLBACKS - COMPREHENSIVE MONITORING
+# CALLBACKS - AGGRESSIVE MONITORING
 # ============================================================================
-early_stopping_patience: 20  # Patient training
-early_stopping_min_delta: 0.0001
-monitor_metric: "val_minADE"  # Best multi-modal metric
-save_top_k: 5
+early_stopping_patience: 25   # Very patient
+early_stopping_min_delta: 0.00005  # Tiny improvement detection
+monitor_metric: "val_minADE"  # Monitor best multi-modal metric
+save_top_k: 10                # Keep more checkpoints
 save_last: true
 
-# SWA - Stochastic Weight Averaging (final accuracy boost)
+# SWA - Stochastic Weight Averaging
 swa_enabled: true
-swa_epoch_start: 0.75      # Start SWA at 75% of training
-swa_lrs: 3.0e-06
-swa_annealing_epochs: 10
+swa_epoch_start: 0.70         # Start at 70%
+swa_lrs: 1.0e-06
+swa_annealing_epochs: 15
+
+# Model Ensemble (inference only)
+ensemble_enabled: true
+ensemble_top_k: 3             # Average top-3 checkpoints
 
 # ============================================================================
-# COMPETITION TARGETS (Aggressive)
+# COMPETITION TARGETS (AGGRESSIVE)
 # ============================================================================
-target_val_ade: 0.32
-target_val_minADE: 0.22
-target_val_fde: 0.50
-target_val_minFDE: 0.35
-target_val_miss_rate: 0.02
+target_val_ade: 0.28
+target_val_minADE: 0.18
+target_val_fde: 0.42
+target_val_minFDE: 0.28
+target_val_miss_rate: 0.01
+
+# ============================================================================
+# NOTES
+# ============================================================================
+# Based on:
+# - MTR v3 (Waymo 2024 1st place): 6 encoder/decoder, hidden=256, LR=1e-4
+# - Trajectron++: Probabilistic multi-modal, social modeling
+# - Best practices: WTA for multi-modal, SWA for generalization
+#
+# For RTX 3050 4GB:
+# - batch_size=24 with 12 modes fits in 4GB
+# - Pre-cache graphs to eliminate CPU bottleneck
+# - accumulate_grad=8 for effective batch of 192

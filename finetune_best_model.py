@@ -47,20 +47,20 @@ BEST_CHECKPOINT = "checkpoints/nfl_worldclass-epoch=04-val_ade=0.545.ckpt"
 OUTPUT_DIR = Path("checkpoints_finetuned")
 CACHE_DIR = Path("cache/finetune")
 
-# Fine-tuning hyperparameters - ULTIMATE ACCURACY for lowest ADE/FDE
+# Fine-tuning hyperparameters - SOTA WINNER GRADE (MTR v3 inspired)
 FINETUNE_CONFIG = {
-    "lr": 0.0008,               # Lower for stability
-    "weight_decay": 0.03,
-    "max_epochs": 100,          # Long training
-    "batch_size": 32,           # Smaller for better gradients
-    "accumulate_grad_batches": 5,  # Effective batch = 160
-    "early_stopping_patience": 20,
+    "lr": 0.0001,               # MTR v3 uses 1e-4
+    "weight_decay": 0.05,       # Stronger regularization
+    "max_epochs": 150,          # Long training
+    "batch_size": 24,           # Smaller for 12 modes
+    "accumulate_grad_batches": 8,  # Effective batch = 192
+    "early_stopping_patience": 25,
     "weeks": list(range(1, 19)),  # ALL 18 weeks
-    # Model architecture - MAXIMUM
-    "hidden_dim": 256,
-    "num_gnn_layers": 8,        # Deep network
+    # Model architecture - MTR v3 inspired
+    "hidden_dim": 256,          # Same as MTR v3
+    "num_gnn_layers": 6,        # 6 encoder layers
     "heads": 8,
-    "num_modes": 8,             # More modes for lower minADE
+    "num_modes": 12,            # More modes for lower minADE
 }
 
 

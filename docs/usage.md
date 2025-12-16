@@ -1,102 +1,157 @@
 # Usage Guide
 
-> Complete workflow guide for training, inference, and competition submission.
+> Complete workflow for training, inference, and competition submission.
 
-## 🚀 Quick Start
+## 🚀 Quick Start Workflow
 
-### 1. Pre-Cache Graphs (Required)
+```mermaid
+flowchart LR
+    subgraph Prep["1. Preparation"]
+        P1["Install"] --> P2["Download Data"]
+        P2 --> P3["Pre-Cache Graphs"]
+    end
+    
+    subgraph Train["2. Training"]
+        T1["Load Config"] --> T2["Train Model"]
+        T2 --> T3["Monitor"]
+        T3 --> T4["Checkpoint"]
+    end
+    
+    subgraph Deploy["3. Deployment"]
+        D1["Load Best Model"] --> D2["Inference"]
+        D2 --> D3["Generate Submission"]
+    end
+    
+    Prep --> Train --> Deploy
+    
+    style Prep fill:#e3f2fd
+    style Train fill:#fff3e0
+    style Deploy fill:#e8f5e9
+```
+
+---
+
+## 📥 1. Preparation
+
+### Install Dependencies
 
 ```bash
-# Build cache for all 18 weeks (~30 min)
+git clone https://github.com/tanm-sys/nfl-analytics-engine.git
+cd nfl-analytics-engine
+pip install -e .
+```
+
+### Pre-Cache Graphs (Required)
+
+```mermaid
+flowchart TB
+    A["Run Pre-Cache Script"] --> B["Build 185K Graphs"]
+    B --> C["Save to Disk<br/>1.8 GB"]
+    C --> D["Ready for Training"]
+    
+    style D fill:#c8e6c9
+```
+
+```bash
 python -c "
 from src.data_loader import *
 from pathlib import Path
 
 loader = DataLoader('.')
-play_meta = build_play_metadata(loader, list(range(1,19)), 5, 10)
-tuples = expand_play_tuples(play_meta)
+tuples = expand_play_tuples(
+    build_play_metadata(loader, list(range(1,19)), 5, 10)
+)
 
-cache_dir = Path('cache/finetune/train')
-cache_dir.mkdir(parents=True, exist_ok=True)
-
-ds = GraphDataset(loader, tuples, 20.0, 10, 5,
-                  cache_dir=cache_dir, persist_cache=True)
+ds = GraphDataset(loader, tuples, 30.0, 10, 5,
+    cache_dir=Path('cache/finetune/train'), persist_cache=True)
 for i, _ in enumerate(ds):
     if i % 1000 == 0: print(f'{i}/{len(ds)}')
 "
 ```
 
-### 2. Train Model
+---
+
+## 🎯 2. Training
+
+### Training Commands
+
+```mermaid
+flowchart LR
+    subgraph Configs["Configuration Options"]
+        C1["max_accuracy<br/>12M params"]
+        C2["high_accuracy<br/>5.4M params"]
+        C3["sanity<br/>Quick test"]
+    end
+    
+    C1 --> Train["python finetune_best_model.py"]
+    C2 --> Train
+    C3 --> Train
+```
 
 ```bash
-# Ultimate accuracy
+# Maximum parameters (competition grade)
 python finetune_best_model.py --config configs/max_accuracy_rtx3050.yaml
 
 # Quick test
 python finetune_best_model.py --config configs/sanity.yaml
 ```
 
-### 3. Monitor Training
+### Monitor Training
+
+```mermaid
+flowchart LR
+    subgraph Monitoring["Live Monitoring"]
+        M1["nvidia-smi<br/>GPU usage"]
+        M2["TensorBoard<br/>Metrics"]
+        M3["Terminal<br/>Progress"]
+    end
+```
 
 ```bash
-# GPU usage
+# Terminal 1: Training
+python finetune_best_model.py --config configs/max_accuracy_rtx3050.yaml
+
+# Terminal 2: GPU monitor
 watch -n 1 nvidia-smi
 
-# TensorBoard
+# Terminal 3: TensorBoard
 tensorboard --logdir lightning_logs/
 ```
 
----
+### Training Output
 
-## 📊 Training Configurations
-
-| Config | Use Case | Time/Epoch | Target ADE |
-|--------|----------|------------|------------|
-| `max_accuracy_rtx3050.yaml` | Competition | ~45 min | < 0.32 |
-| `high_accuracy.yaml` | High quality | ~40 min | < 0.38 |
-| `production.yaml` | Balanced | ~35 min | < 0.45 |
-| `sanity.yaml` | Quick test | ~2 min | N/A |
-
----
-
-## 🎯 Training Workflow
-
-### Full Training Pipeline
-
-```bash
-# Step 1: Pre-cache (one-time, ~30 min)
-python scripts/precache_graphs.py
-
-# Step 2: Train (~8 hours for 100 epochs)
-python finetune_best_model.py --config configs/max_accuracy_rtx3050.yaml
-
-# Step 3: Find best checkpoint
-ls checkpoints_finetuned/
-
-# Step 4: Generate submission
-python -m src.competition_output \
-    --checkpoint checkpoints_finetuned/best.ckpt \
-    --output submission.csv
+```
+Epoch 0/199 ━━━━━━━━━━━━━━━━ 73/9234 0:00:34 • 1:13:22 2.08it/s v_num: 1.000
 ```
 
 ---
 
-## 🔮 Inference
+## 🔮 3. Inference
 
 ### Load Trained Model
+
+```mermaid
+flowchart TB
+    A["Load Checkpoint"] --> B["Model.eval()"]
+    B --> C["Prepare Batch"]
+    C --> D["Forward Pass"]
+    D --> E["16 Mode Predictions"]
+    E --> F["Select Best Mode"]
+    F --> G["Final Trajectory"]
+```
 
 ```python
 from src.train import NFLGraphPredictor
 import torch
 
-# Load checkpoint
+# Load best checkpoint
 model = NFLGraphPredictor.load_from_checkpoint(
     "checkpoints_finetuned/best.ckpt",
     map_location="cuda"
 )
 model.eval()
 
-# Prepare batch
+# Prepare data
 from torch_geometric.data import Data, Batch
 
 data = Data(
@@ -115,29 +170,41 @@ with torch.no_grad():
 print(predictions.shape)  # [22, 10, 2]
 ```
 
-### Probabilistic Prediction (Multi-Modal)
+### Multi-Modal Prediction
 
 ```python
-# Get all modes
+# Get all 16 modes
 with torch.no_grad():
-    params, probs, cov, _ = model.model(batch, return_distribution=True)
-    
-# params: [N, T, K, 5] - mu_x, mu_y, sigma_x, sigma_y, rho
-# probs: [N, K] - mode probabilities
+    params, probs, _, _ = model.model(batch, return_distribution=True)
 
-# Best mode
-best_mode = probs.argmax(dim=-1)
-mu = params[..., :2]  # positions
+# params: [N, 10, 16, 5] - mu_x, mu_y, sigma_x, sigma_y, rho
+# probs: [N, 16] - mode probabilities
 
+# Best mode selection
+best_mode = probs.argmax(dim=-1)  # [N]
+mu = params[..., :2]  # [N, 10, 16, 2]
+
+# Get best trajectory per player
 for i in range(22):
-    best = mu[i, :, best_mode[i], :]  # [10, 2]
+    best_traj = mu[i, :, best_mode[i], :]  # [10, 2]
 ```
 
 ---
 
-## 📤 Competition Submission
+## 📤 4. Competition Submission
 
 ### Generate Predictions
+
+```mermaid
+flowchart TB
+    A["Load Model"] --> B["Load Test Data"]
+    B --> C["Batch Inference"]
+    C --> D["Compute Metrics"]
+    D --> E["Format CSV"]
+    E --> F["submission.csv"]
+    
+    style F fill:#c8e6c9
+```
 
 ```bash
 python -m src.competition_output \
@@ -158,37 +225,37 @@ game_id,play_id,node_idx,frame_id,predicted_x,predicted_y,confidence_lower_x,con
 
 ---
 
-## 📈 Metrics Tracking
+## 📈 5. Evaluation
 
-### Log Metrics During Training
-
-```python
-# Automatically logged:
-# - train_loss, val_loss
-# - val_ade, val_fde
-# - val_minADE, val_minFDE
-# - val_miss_rate
-# - learning_rate
-```
-
-### Custom Evaluation
+### Compute Metrics
 
 ```python
-from src.metrics import calculate_ade, calculate_fde
+from src.metrics import compute_ade, compute_fde, compute_miss_rate
 
-# predictions: [N, T, 2]
-# targets: [N, T, 2]
-
-ade = calculate_ade(predictions, targets)
-fde = calculate_fde(predictions, targets)
+# predictions: [N, T, 2], targets: [N, T, 2]
+ade = compute_ade(predictions, targets)
+fde = compute_fde(predictions, targets)
+miss_rate = compute_miss_rate(predictions, targets, threshold=2.0)
 
 print(f"ADE: {ade:.4f} yards")
 print(f"FDE: {fde:.4f} yards")
+print(f"Miss Rate: {miss_rate:.2%}")
+```
+
+### Multi-Modal Metrics
+
+```python
+# For minADE/minFDE with 16 modes
+from src.metrics import compute_min_ade
+
+# all_modes: [N, T, 16, 2]
+min_ade = compute_min_ade(all_modes, targets)
+min_fde = compute_min_fde(all_modes, targets)
 ```
 
 ---
 
-## 🎨 Visualization
+## 🎨 6. Visualization
 
 ### Trajectory Plot
 
@@ -196,34 +263,24 @@ print(f"FDE: {fde:.4f} yards")
 from src.visualization import plot_trajectories
 
 plot_trajectories(
-    predictions=predictions,   # [N, T, 2]
-    ground_truth=targets,      # [N, T, 2]
+    predictions=predictions,   # [N, 10, 2]
+    ground_truth=targets,      # [N, 10, 2]
     current_pos=current_pos,   # [N, 2]
     output_path="trajectories.png"
 )
 ```
 
-### Attention Map
+### Multi-Modal Visualization
 
 ```python
-# Get attention weights
-with torch.no_grad():
-    _, _, attn = model.model(batch, return_attention_weights=True)
+from src.visualization import plot_multimodal
 
-from src.visualization import plot_attention_map
-plot_attention_map(attn, output_path="attention.png")
-```
-
-### Play Animation
-
-```python
-from src.visualization import animate_play
-
-animate_play(
-    play_df=tracking_df,
-    predictions=predictions,
-    output_path="play.gif",
-    fps=10
+plot_multimodal(
+    modes=all_modes,           # [N, 10, 16, 2]
+    mode_probs=probs,          # [N, 16]
+    ground_truth=targets,
+    player_idx=5,
+    output_path="multimodal.png"
 )
 ```
 
@@ -231,31 +288,24 @@ animate_play(
 
 ## 🔧 Advanced Usage
 
-### Custom Loss Weights
-
-```python
-model = NFLGraphPredictor(
-    trajectory_weight=1.0,
-    velocity_weight=0.5,
-    social_nce_weight=0.15,
-    wta_k_best=2,
-    diversity_weight=0.04,
-    endpoint_focal_weight=0.25,
-)
-```
-
 ### Resume Training
 
 ```bash
-# From latest checkpoint
 python finetune_best_model.py \
     --config configs/max_accuracy_rtx3050.yaml \
     --resume checkpoints_finetuned/last.ckpt
 ```
 
-### Hyperparameter Tuning
+### Custom Configuration
+
+```yaml
+# my_config.yaml
+hidden_dim: 512
+num_modes: 20
+batch_size: 8
+learning_rate: 0.00005
+```
 
 ```bash
-# Optuna optimization
-python -m src.train --mode tune --n-trials 100
+python finetune_best_model.py --config my_config.yaml
 ```

@@ -1,124 +1,164 @@
 # Performance Guide
 
-> Benchmarks, optimization techniques, and GPU utilization strategies for the NFL Analytics Engine.
+> Benchmarks, optimization techniques, and GPU utilization strategies.
 
 ## 📊 Performance Benchmarks
 
 ### Training Speed (RTX 3050 4GB)
 
-| Configuration | Speed (it/s) | Epoch Time | GPU Util |
-|---------------|-------------|------------|----------|
-| Without Cache | 0.13 | ~6.5 hours | ~10% |
-| **With Cache** | 1.2-1.5 | ~45 min | ~70-80% |
-| Cache + FP16 | 1.5-2.0 | ~35 min | ~85% |
+```mermaid
+xychart-beta
+    title "Training Speed (iterations/second)"
+    x-axis ["No Cache", "With Cache", "Cache+FP16"]
+    y-axis "Speed (it/s)" 0 --> 2.5
+    bar [0.13, 1.2, 2.1]
+```
 
-### Memory Usage
+| Configuration | Speed | Epoch Time | GPU Util |
+|---------------|-------|------------|----------|
+| No Cache | 0.13 it/s | ~6.5 hours | ~10% |
+| **With Cache** | 1.2 it/s | ~70 min | ~60% |
+| **Cache + FP16** | 2.1 it/s | ~45 min | ~80% |
 
-| Component | VRAM Usage |
-|-----------|------------|
-| Model (5.4M params) | ~500 MB |
-| Batch (32 graphs) | ~1.5 GB |
-| Gradients | ~1.2 GB |
-| Optimizer states | ~800 MB |
-| **Total** | **~3.5 GB / 4 GB** |
+### Memory Usage (12M Parameter Model)
+
+```mermaid
+pie title VRAM Usage (4GB RTX 3050)
+    "Model Weights" : 800
+    "Batch Data" : 1200
+    "Gradients" : 1500
+    "Optimizer" : 500
+```
+
+| Component | Size | Notes |
+|-----------|------|-------|
+| Model (FP16) | ~800 MB | 12M params × 2 bytes |
+| Batch (16) | ~1.2 GB | 16 graphs |
+| Gradients | ~1.5 GB | Accumulated |
+| Optimizer | ~500 MB | Adam states |
+| **Total** | **~4.0 GB** | Fits! ✅ |
 
 ---
 
 ## ⚡ Optimization Techniques
 
-### 1. Graph Pre-Caching (Critical)
+### 1. Graph Pre-Caching (15× Speedup)
 
-**Problem**: Graph construction is CPU-bound. GPU idles waiting for data.
+```mermaid
+flowchart LR
+    subgraph Before["Without Cache"]
+        B1["CPU: Build Graph"] --> B2["GPU: Forward"]
+        B2 --> B3["CPU: Build Graph"]
+        B3 --> B4["GPU: Forward"]
+    end
+    
+    subgraph After["With Cache"]
+        A1["Disk: Load Graph"] --> A2["GPU: Forward"]
+        A2 --> A3["Disk: Load Graph"]
+        A3 --> A4["GPU: Forward"]
+    end
+    
+    Before --> |"15× faster"| After
+```
 
-**Solution**: Pre-cache all graphs to disk.
-
+**Implementation:**
 ```bash
-# Pre-cache ~185K graphs (~1.8GB on disk)
+# Pre-cache 185K graphs (~30 min)
 python -c "
 from src.data_loader import *
 from pathlib import Path
 
 loader = DataLoader('.')
-play_meta = build_play_metadata(loader, list(range(1,19)), 5, 10)
-tuples = expand_play_tuples(play_meta)
+tuples = expand_play_tuples(
+    build_play_metadata(loader, list(range(1,19)), 5, 10)
+)
 
-cache_dir = Path('cache/finetune/train')
-cache_dir.mkdir(parents=True, exist_ok=True)
-
-ds = GraphDataset(loader, tuples, 20.0, 10, 5, 
-                  cache_dir=cache_dir, persist_cache=True)
+ds = GraphDataset(loader, tuples, 30.0, 10, 5,
+    cache_dir=Path('cache/finetune/train'), persist_cache=True)
 for i, _ in enumerate(ds):
     if i % 1000 == 0: print(f'{i}/{len(ds)}')
 "
 ```
 
-**Impact**: 9x speedup (0.13 → 1.2 it/s)
+### 2. Mixed Precision (2× Speedup)
 
-### 2. Mixed Precision Training
+```mermaid
+flowchart LR
+    subgraph FP32["FP32 Training"]
+        F1["Weights: 4 bytes"]
+        F2["Gradients: 4 bytes"]
+        F3["Optimizer: 8 bytes"]
+    end
+    
+    subgraph FP16["Mixed Precision"]
+        M1["Weights: 2 bytes"]
+        M2["Gradients: 2 bytes"]
+        M3["Master: 4 bytes"]
+    end
+    
+    FP32 --> |"50% memory, 2× speed"| FP16
+```
 
-**Problem**: FP32 operations don't utilize Tensor Cores.
-
-**Solution**: Enable automatic mixed precision.
-
+**Enable:**
 ```python
-# In trainer
-precision="16-mixed"
-
-# In code
+trainer = Trainer(precision="16-mixed")
 torch.set_float32_matmul_precision('medium')
 ```
 
-**Impact**: ~1.5x speedup, 50% less memory
-
 ### 3. Gradient Accumulation
 
-**Problem**: Large effective batch size doesn't fit in VRAM.
-
-**Solution**: Accumulate gradients over multiple forward passes.
-
-```yaml
-batch_size: 32
-accumulate_grad_batches: 5
-# Effective batch = 160
+```mermaid
+flowchart TB
+    subgraph Accumulation["Gradient Accumulation (12 steps)"]
+        S1["Step 1: Forward, Backward"] --> A["Accumulate"]
+        S2["Step 2: Forward, Backward"] --> A
+        S3["..."] --> A
+        S12["Step 12: Forward, Backward"] --> A
+        A --> U["Optimizer Update"]
+    end
 ```
 
-**Impact**: Better gradients without OOM
-
-### 4. cuDNN Benchmark Mode
-
-**Problem**: Default convolution algorithms not optimal.
-
-**Solution**: Enable autotuning.
-
-```python
-trainer = Trainer(benchmark=True)
-```
-
-**Impact**: ~10% speedup after warmup
+**Effect:**
+- Batch size: 16
+- Accumulate: 12
+- **Effective batch: 192**
 
 ---
 
 ## 🎯 Target Metrics
 
-### Competition Targets (Ultimate Config)
+### Competition Targets (12M Model)
 
-| Metric | Target | World-Class |
-|--------|--------|-------------|
-| **ADE** | < 0.32 | < 0.25 |
-| **FDE** | < 0.50 | < 0.40 |
-| **minADE** | < 0.22 | < 0.18 |
-| **minFDE** | < 0.35 | < 0.28 |
-| **Miss Rate** | < 2% | < 1% |
+```mermaid
+flowchart LR
+    subgraph Targets["Target Metrics"]
+        T1["ADE < 0.22"]
+        T2["minADE < 0.14"]
+        T3["FDE < 0.35"]
+        T4["minFDE < 0.22"]
+        T5["Miss < 0.5%"]
+    end
+    
+    subgraph WorldClass["World-Class"]
+        W1["ADE < 0.18"]
+        W2["minADE < 0.10"]
+        W3["FDE < 0.28"]
+        W4["minFDE < 0.18"]
+        W5["Miss < 0.2%"]
+    end
+    
+    Targets --> WorldClass
+```
 
 ### Metric Definitions
 
-| Metric | Formula | Description |
-|--------|---------|-------------|
-| **ADE** | Σ‖pred - gt‖ / (N×T) | Average error across all frames |
-| **FDE** | ‖pred_T - gt_T‖ / N | Error at final frame |
-| **minADE** | min_k(ADE_k) | Best of K modes |
-| **minFDE** | min_k(FDE_k) | Best final frame |
-| **Miss Rate** | %{FDE > 2} | Fraction of bad predictions |
+| Metric | Formula | Lower = Better |
+|--------|---------|----------------|
+| **ADE** | Σ‖pred - gt‖ / (N×T) | ✓ |
+| **FDE** | ‖pred_T - gt_T‖ / N | ✓ |
+| **minADE** | min_k(ADE_k) | ✓ |
+| **minFDE** | min_k(FDE_k) | ✓ |
+| **Miss Rate** | %{FDE > 2} | ✓ |
 
 ---
 
@@ -130,8 +170,8 @@ trainer = Trainer(benchmark=True)
 |----------|-------------|
 | GPU VRAM | 4 GB |
 | RAM | 16 GB |
-| Disk (cache) | 5 GB |
-| CPU Cores | 4+ |
+| Disk | 10 GB (cache) |
+| CPU | 4+ cores |
 
 ### Recommended (RTX 3060+)
 
@@ -139,8 +179,8 @@ trainer = Trainer(benchmark=True)
 |----------|-------------|
 | GPU VRAM | 8+ GB |
 | RAM | 32 GB |
-| Disk (SSD) | 20 GB |
-| CPU Cores | 8+ |
+| Disk | 20 GB SSD |
+| CPU | 8+ cores |
 
 ---
 
@@ -149,75 +189,76 @@ trainer = Trainer(benchmark=True)
 ### Real-Time GPU Stats
 
 ```bash
-# Watch GPU utilization
+# Watch GPU usage
 watch -n 1 nvidia-smi
 
-# Detailed metrics
+# Detailed query
 nvidia-smi --query-gpu=utilization.gpu,memory.used,temperature.gpu --format=csv -l 1
 ```
 
-### TensorBoard
+### TensorBoard Metrics
+
+```mermaid
+flowchart LR
+    subgraph Logged["Logged Metrics"]
+        L1["train_loss"]
+        L2["val_loss"]
+        L3["val_ade"]
+        L4["val_minADE"]
+        L5["val_fde"]
+        L6["learning_rate"]
+    end
+    
+    Logged --> TB["TensorBoard"]
+```
 
 ```bash
-# Start TensorBoard
 tensorboard --logdir lightning_logs/
-
-# Metrics logged:
-# - train_loss, val_loss
-# - val_ade, val_fde, val_minADE
-# - learning_rate
-# - gpu_memory_usage
 ```
 
 ---
 
 ## 🚀 Speed Optimization Checklist
 
-1. ✅ **Pre-cache graphs** (9x speedup)
-2. ✅ **Enable FP16 mixed precision** (1.5x speedup)
-3. ✅ **Use benchmark=True** (10% speedup)
-4. ✅ **Set torch_matmul_precision('medium')** (Tensor Cores)
-5. ✅ **Use SSD for cache** (faster disk I/O)
-6. ✅ **Pin memory** (faster CPU→GPU transfer)
-7. ⚠️ **num_workers=0** (with cache, CPU not bottleneck)
+```mermaid
+flowchart TB
+    C1["✅ Pre-cache graphs"] --> R1["15× speedup"]
+    C2["✅ Mixed precision"] --> R2["2× speedup"]
+    C3["✅ benchmark=True"] --> R3["10% speedup"]
+    C4["✅ Tensor Cores"] --> R4["FP16 ops"]
+    C5["✅ SSD for cache"] --> R5["Faster I/O"]
+    C6["✅ pin_memory"] --> R6["Fast transfer"]
+```
 
 ---
 
 ## 🔍 Bottleneck Diagnosis
 
-### Symptom: Low GPU Utilization (< 50%)
+### Low GPU Utilization (< 50%)
 
-**Cause 1**: CPU bottleneck (data loading)
-```bash
-# Check CPU usage
-htop
-# If CPU at 100%, graphs not cached
+```mermaid
+flowchart TB
+    Problem["GPU < 50%"] --> Q1{"Graphs cached?"}
+    Q1 --> |No| S1["Pre-cache graphs"]
+    Q1 --> |Yes| Q2{"Batch size?"}
+    Q2 --> |Small| S2["Increase batch"]
+    Q2 --> |OK| Q3{"Workers?"}
+    Q3 --> |0| S3["Expected with cache"]
 ```
 
-**Solution**: Pre-cache graphs
+### OOM Errors
 
-**Cause 2**: Small batch size
+```mermaid
+flowchart TB
+    Problem["CUDA OOM"] --> S1["Reduce batch_size"]
+    S1 --> S2["Reduce num_modes"]
+    S2 --> S3["Increase accumulation"]
+    S3 --> S4["Reduce hidden_dim"]
+```
+
+**Fix:**
 ```yaml
-# Increase batch size
-batch_size: 48  # From 32
-```
-
-### Symptom: OOM Errors
-
-**Cause**: Model + batch too large
-
-**Solution**:
-```yaml
-batch_size: 24           # Reduce
-num_modes: 6             # Reduce modes
-accumulate_grad_batches: 6  # Compensate
-```
-
-### Symptom: Slow Training Speed
-
-**Cause**: No mixed precision
-
-**Solution**:
-```python
-precision="16-mixed"
+batch_size: 12          # Reduce from 16
+num_modes: 12           # Reduce from 16
+accumulate_grad_batches: 16  # Increase
 ```

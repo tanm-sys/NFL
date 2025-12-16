@@ -1,51 +1,107 @@
 # Data Pipeline
 
-> ETL process, graph construction, feature engineering, and caching strategies.
+> ETL process, graph construction, and caching strategies.
 
 ## 🔄 Pipeline Overview
 
 ```mermaid
-graph LR
-    A[CSV Files] --> B[Polars Load]
-    B --> C[Feature Engineering]
-    C --> D[Graph Construction]
-    D --> E[Disk Cache]
-    E --> F[PyG DataLoader]
-    F --> G[Training]
+flowchart TB
+    subgraph Source["📥 Data Sources"]
+        S1[("tracking_week_*.csv<br/>18 files")]
+        S2[("plays.csv")]
+        S3[("players.csv")]
+        S4[("games.csv")]
+    end
+    
+    subgraph Load["⚡ Polars Loading"]
+        L1["LazyFrame<br/>Streaming"]
+        L2["Schema Validation"]
+        L3["Join Operations"]
+    end
+    
+    subgraph Features["🔧 Feature Engineering"]
+        F1["Node Features<br/>[N, 9]"]
+        F2["Edge Features<br/>[E, 5]"]
+        F3["Strategic Embeds"]
+        F4["Temporal History"]
+    end
+    
+    subgraph Graph["🔗 Graph Construction"]
+        G1["Radius Graph<br/>r=30 yards"]
+        G2["PyG Data Object"]
+        G3["Disk Cache<br/>185K graphs"]
+    end
+    
+    subgraph Output["📤 DataLoader"]
+        O1["PyG DataLoader"]
+        O2["Batching"]
+        O3["GPU Transfer"]
+    end
+    
+    Source --> Load
+    Load --> Features
+    Features --> Graph
+    Graph --> Output
+    
+    style Source fill:#e3f2fd
+    style Load fill:#fff3e0
+    style Features fill:#f3e5f5
+    style Graph fill:#e8f5e9
+    style Output fill:#fce4ec
 ```
 
 ---
 
-## 📥 Data Ingestion
+## 📥 Data Sources
 
-### Source Files
-
-| File | Description | Size (18 weeks) |
-|------|-------------|-----------------|
-| `tracking_week_*.csv` | Player positions @ 10 Hz | ~500 MB/week |
-| `plays.csv` | Play metadata | ~5 MB |
-| `players.csv` | Player info | ~200 KB |
-| `games.csv` | Game schedule | ~50 KB |
-
-### Loading with Polars
-
-```python
-from src.data_loader import DataLoader
-
-loader = DataLoader(".")
-
-# Load single week
-df = loader.load_week_data(1)
-print(df.schema)
-
-# Key columns:
-# - nfl_id: Player ID
-# - x, y: Position (yards)
-# - s: Speed (yards/sec)
-# - a: Acceleration
-# - dir, o: Direction, Orientation (degrees)
-# - game_id, play_id, frame_id
+```mermaid
+erDiagram
+    TRACKING {
+        int game_id PK
+        int play_id PK
+        int nfl_id PK
+        int frame_id PK
+        float x
+        float y
+        float s
+        float a
+        float dir
+        float o
+    }
+    
+    PLAYS {
+        int game_id PK
+        int play_id PK
+        int down
+        int yards_to_go
+        string formation
+    }
+    
+    PLAYERS {
+        int nfl_id PK
+        string name
+        string position
+    }
+    
+    GAMES {
+        int game_id PK
+        string home_team
+        string away_team
+    }
+    
+    TRACKING ||--o{ PLAYS : "belongs to"
+    TRACKING ||--o{ PLAYERS : "is player"
+    PLAYS ||--o{ GAMES : "in game"
 ```
+
+### Data Statistics
+
+| Dataset | Rows | Columns | Size |
+|---------|------|---------|------|
+| Tracking (18 weeks) | ~100M | 17 | ~9 GB |
+| Plays | ~14K | 25 | ~5 MB |
+| Players | ~2K | 8 | ~200 KB |
+| Games | ~272 | 10 | ~50 KB |
 
 ---
 
@@ -53,118 +109,137 @@ print(df.schema)
 
 ### Node Features (9D)
 
-| Index | Feature | Range | Description |
-|-------|---------|-------|-------------|
-| 0 | x | [0, 120] | X position (yards) |
-| 1 | y | [0, 53.33] | Y position (yards) |
-| 2 | speed | [0, ~12] | Speed (yards/sec) |
-| 3 | acceleration | [-5, 5] | Acceleration |
-| 4 | direction | [0, 360] | Movement direction |
-| 5 | velocity_x | [-12, 12] | X velocity |
-| 6 | velocity_y | [-12, 12] | Y velocity |
-| 7 | is_ball_carrier | {0, 1} | Ball carrier flag |
-| 8 | motion_intensity | [0, 15] | sqrt(vx² + vy²) + a |
+```mermaid
+flowchart LR
+    subgraph Raw["Raw Data"]
+        R1["x, y"]
+        R2["s (speed)"]
+        R3["a (accel)"]
+        R4["dir"]
+    end
+    
+    subgraph Derived["Derived"]
+        D1["velocity_x<br/>s × cos(dir)"]
+        D2["velocity_y<br/>s × sin(dir)"]
+        D3["motion_intensity<br/>√(vx²+vy²) + a"]
+        D4["is_ball_carrier"]
+    end
+    
+    Raw --> Derived
+    
+    subgraph Output["Node Feature [9D]"]
+        O["x, y, speed, accel,<br/>dir, vx, vy, ball, motion"]
+    end
+    
+    Derived --> Output
+```
+
+| Index | Feature | Type | Range |
+|-------|---------|------|-------|
+| 0 | x | float | [0, 120] |
+| 1 | y | float | [0, 53.33] |
+| 2 | speed | float | [0, 12] |
+| 3 | acceleration | float | [-5, 5] |
+| 4 | direction | float | [0, 360] |
+| 5 | velocity_x | float | [-12, 12] |
+| 6 | velocity_y | float | [-12, 12] |
+| 7 | is_ball_carrier | int | {0, 1} |
+| 8 | motion_intensity | float | [0, 15] |
 
 ### Edge Features (5D)
 
-| Index | Feature | Range | Description |
-|-------|---------|-------|-------------|
-| 0 | distance | [0, radius] | Euclidean distance |
-| 1 | angle | [0, 2π] | Relative angle |
-| 2 | relative_speed | [-15, 15] | Speed difference |
-| 3 | relative_direction | [0, 360] | Direction difference |
-| 4 | same_team | {0, 1} | Same team indicator |
-
-### Strategic Embeddings
-
-| Embedding | Vocab | Description |
-|-----------|-------|-------------|
-| Role | 5 | QB, RB, WR, TE, OL, DL, LB, DB |
-| Side | 3 | Offense, Defense, Ball |
-| Formation | 8 | I-Form, Shotgun, Pistol, etc. |
-| Alignment | 10 | Left, Right, Center, Wide, etc. |
+```mermaid
+flowchart LR
+    subgraph Pair["Player Pair"]
+        P1["Player i"]
+        P2["Player j"]
+    end
+    
+    subgraph Compute["Edge Computation"]
+        C1["distance<br/>‖pos_i - pos_j‖"]
+        C2["angle<br/>atan2(Δy, Δx)"]
+        C3["rel_speed<br/>s_i - s_j"]
+        C4["rel_direction<br/>dir_i - dir_j"]
+        C5["same_team<br/>team_i == team_j"]
+    end
+    
+    P1 --> Compute
+    P2 --> Compute
+```
 
 ---
 
 ## 🔗 Graph Construction
 
-### Algorithm
-
-```python
-def create_graph(players_df, frame_id, radius=20.0):
-    """
-    1. Extract player positions at frame_id
-    2. Connect players within `radius` yards
-    3. Compute node features
-    4. Compute edge features
-    5. Add context (down, distance, box)
-    """
+```mermaid
+flowchart TB
+    subgraph Input["Per Frame"]
+        I1["22 Players"]
+        I2["Positions [22, 2]"]
+    end
     
-    # Node selection
-    nodes = players_df.filter(pl.col("frame_id") == frame_id)
+    subgraph Radius["Radius Graph"]
+        R1["r = 30 yards"]
+        R2["Connect if dist < r"]
+        R3["~100-150 edges"]
+    end
     
-    # Edge creation (radius graph)
-    from torch_geometric.nn import radius_graph
-    positions = torch.tensor(nodes[["x", "y"]].to_numpy())
-    edge_index = radius_graph(positions, r=radius)
+    subgraph PyG["PyG Data Object"]
+        P1["x: [22, 9]"]
+        P2["edge_index: [2, E]"]
+        P3["edge_attr: [E, 5]"]
+        P4["current_pos: [22, 2]"]
+        P5["target: [22, 10, 2]"]
+        P6["context: [1, 3]"]
+    end
     
-    # Feature computation
-    node_features = compute_node_features(nodes)
-    edge_features = compute_edge_features(nodes, edge_index)
-    
-    return Data(
-        x=node_features,
-        edge_index=edge_index,
-        edge_attr=edge_features,
-        ...
-    )
+    Input --> Radius --> PyG
 ```
 
 ### Graph Statistics
 
 | Property | Value |
 |----------|-------|
-| Nodes per graph | 22 (players) |
-| Edges (radius=20) | ~100-150 |
-| Node features | 9D |
-| Edge features | 5D |
+| Nodes per graph | 22 |
+| Edges (r=30) | 100-150 |
 | Graphs per week | ~10K |
-| Total graphs | ~185K (18 weeks) |
+| **Total graphs** | **185K** |
 
 ---
 
 ## 💾 Caching System
 
-### Disk Cache
-
-```python
-GraphDataset(
-    cache_dir="cache/finetune/train",
-    persist_cache=True,  # Save to disk
-)
+```mermaid
+flowchart TB
+    subgraph Build["Graph Building"]
+        B1["First Access"]
+        B2["Construct Graph"]
+        B3["Compute Features"]
+    end
+    
+    subgraph Cache["Caching Layers"]
+        C1["RAM Cache<br/>100 graphs"]
+        C2["Disk Cache<br/>185K graphs"]
+        C3[".pt files<br/>1.8 GB total"]
+    end
+    
+    subgraph Access["Subsequent Access"]
+        A1["Check RAM"]
+        A2["Check Disk"]
+        A3["Load Instant"]
+    end
+    
+    Build --> C2
+    C2 --> C1
+    C1 --> A3
+    
+    style C2 fill:#c8e6c9
 ```
-
-**Benefits:**
-- Skip graph construction after first run
-- 9x faster training
-- ~1.8GB disk for 185K graphs
-
-### RAM Cache
-
-```python
-GraphDataset(
-    in_memory_cache_size=200,  # Keep 200 graphs in RAM
-)
-```
-
-**Benefits:**
-- Zero disk I/O for cached graphs
-- Best for repeated epochs
 
 ### Pre-Caching Script
 
 ```python
-# cache/precache_graphs.py
+# Pre-cache all 185K graphs (~30 min)
 from src.data_loader import *
 from pathlib import Path
 
@@ -175,39 +250,58 @@ tuples = expand_play_tuples(play_meta)
 cache_dir = Path('cache/finetune/train')
 cache_dir.mkdir(parents=True, exist_ok=True)
 
-ds = GraphDataset(loader, tuples, 20.0, 10, 5,
-                  cache_dir=cache_dir, persist_cache=True)
+ds = GraphDataset(
+    loader, tuples, 30.0, 10, 5,
+    cache_dir=cache_dir,
+    persist_cache=True
+)
 
-# Build cache
 for i, _ in enumerate(ds):
     if i % 1000 == 0: print(f'{i}/{len(ds)}')
+```
+
+### Performance Impact
+
+```mermaid
+flowchart LR
+    subgraph Before["Without Cache"]
+        B1["0.13 it/s"]
+        B2["~6.5 hr/epoch"]
+        B3["GPU: 10%"]
+    end
+    
+    subgraph After["With Cache"]
+        A1["2.0+ it/s"]
+        A2["~70 min/epoch"]
+        A3["GPU: 80%"]
+    end
+    
+    Before --> |"15× faster"| After
+    
+    style After fill:#c8e6c9
 ```
 
 ---
 
 ## 📊 Data Splits
 
-### Train/Val Split
+```mermaid
+pie title Train/Val Split
+    "Train (80%)" : 147741
+    "Validation (20%)" : 37934
+```
+
+### Split Strategy
 
 ```python
-# 80/20 split by play
+# Random 80/20 split by play
 from sklearn.model_selection import train_test_split
 
 train_plays, val_plays = train_test_split(
-    all_plays, test_size=0.2, random_state=42
+    all_plays,
+    test_size=0.2,
+    random_state=42
 )
-
-# Result:
-# Train: ~147K samples
-# Val: ~38K samples
-```
-
-### Week-Based Split
-
-```python
-# Alternative: temporal split
-train_weeks = list(range(1, 15))   # Weeks 1-14
-val_weeks = list(range(15, 19))    # Weeks 15-18
 ```
 
 ---
@@ -216,7 +310,7 @@ val_weeks = list(range(15, 19))    # Weeks 15-18
 
 | Optimization | Impact |
 |--------------|--------|
-| Polars (vs Pandas) | 3-5x faster loading |
-| Graph pre-caching | 9x faster training |
+| Polars (vs Pandas) | 3-5× faster |
+| Pre-caching | **15× faster** |
 | RAM cache | Zero disk I/O |
-| Lazy evaluation | Lower memory |
+| Mixed precision | 2× GPU |

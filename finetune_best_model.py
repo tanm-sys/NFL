@@ -108,6 +108,7 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
         num_workers=4,
         persistent_workers=True,
         pin_memory=True,
+        prefetch_factor=4,  # Async prefetch 4 batches ahead
     )
     
     val_loader = PyGDataLoader(
@@ -117,6 +118,7 @@ def create_dataloaders(weeks, batch_size, history_len=5, future_seq_len=10):
         num_workers=2,
         persistent_workers=True,
         pin_memory=True,
+        prefetch_factor=4,
     )
     
     return train_loader, val_loader
@@ -182,7 +184,7 @@ def finetune():
         ),
     ]
     
-    # Setup trainer
+    # Setup trainer with full GPU optimization
     trainer = pl.Trainer(
         max_epochs=FINETUNE_CONFIG["max_epochs"],
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
@@ -190,10 +192,21 @@ def finetune():
         callbacks=callbacks,
         accumulate_grad_batches=FINETUNE_CONFIG["accumulate_grad_batches"],
         gradient_clip_val=1.0,
-        precision="16-mixed",  # Mixed precision for speed
+        precision="16-mixed",  # Mixed precision for Tensor Cores
         log_every_n_steps=50,
         enable_progress_bar=True,
+        benchmark=True if torch.cuda.is_available() else False,  # cuDNN autotuner
+        deterministic=False,  # Non-deterministic for max speed
     )
+    
+    # torch.compile for 2x speedup (PyTorch 2.0+)
+    if torch.cuda.is_available() and hasattr(torch, 'compile'):
+        try:
+            console.print("[yellow]⚡ Compiling model with torch.compile...[/yellow]")
+            model.model = torch.compile(model.model, mode="reduce-overhead")
+            console.print("[green]✅ Model compiled for maximum performance![/green]")
+        except Exception as e:
+            console.print(f"[yellow]⚠️ torch.compile failed: {e}[/yellow]")
     
     console.print("\n[bold green]Starting fine-tuning...[/bold green]\n")
     

@@ -848,8 +848,27 @@ def train_model(sanity=False, weeks=None, probabilistic=False, split_path: str =
             in_memory_cache_size=2,
         )
 
-        train_loader = PyGDataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
-        val_loader = PyGDataLoader(val_dataset, batch_size=32, num_workers=4)
+        # GPU-optimized DataLoaders: pin_memory, persistent_workers, prefetch
+        num_workers = 4 if not sanity else 0
+        use_cuda = torch.cuda.is_available()
+        
+        train_loader = PyGDataLoader(
+            train_dataset, 
+            batch_size=32, 
+            shuffle=True, 
+            num_workers=num_workers,
+            pin_memory=use_cuda,  # Fast CPU->GPU transfer
+            persistent_workers=num_workers > 0,  # Keep workers alive
+            prefetch_factor=4 if num_workers > 0 else None,  # Async prefetch
+        )
+        val_loader = PyGDataLoader(
+            val_dataset, 
+            batch_size=32, 
+            num_workers=num_workers,
+            pin_memory=use_cuda,
+            persistent_workers=num_workers > 0,
+            prefetch_factor=4 if num_workers > 0 else None,
+        )
         sample_batch = next(iter(val_loader)) if len(val_dataset) > 0 else None
         
         # Model
@@ -889,15 +908,31 @@ def train_model(sanity=False, weeks=None, probabilistic=False, split_path: str =
         if not sanity and sample_batch is not None:
             callbacks.append(AttentionVisualizationCallback(sample_batch, log_every_n_epochs=10))
         
+        # GPU Precision and Compilation
+        precision = "16-mixed" if torch.cuda.is_available() else 32  # Mixed precision for Tensor Cores
+        
         trainer = pl.Trainer(
             max_epochs=max_epochs, 
             accelerator=accelerator, 
+            precision=precision,  # AMP: Automatic Mixed Precision
             log_every_n_steps=1 if sanity else 10,
             limit_train_batches=limit_train_batches,
             gradient_clip_val=1.0,
             callbacks=callbacks if not sanity else [],
-            enable_progress_bar=True
+            enable_progress_bar=True,
+            # GPU Optimizations
+            benchmark=True if torch.cuda.is_available() else False,  # cuDNN autotuner
+            deterministic=False,  # Allow non-deterministic ops for speed
         )
+        
+        # torch.compile for 2x speedup (PyTorch 2.0+)
+        if torch.cuda.is_available() and hasattr(torch, 'compile'):
+            try:
+                print("⚡ Compiling model with torch.compile (reduce-overhead mode)...")
+                model.model = torch.compile(model.model, mode="reduce-overhead")
+                print("✅ Model compiled successfully!")
+            except Exception as e:
+                print(f"⚠️ torch.compile failed (continuing without): {e}")
         
         trainer.fit(model, train_loader, val_loader)
         

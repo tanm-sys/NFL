@@ -33,6 +33,11 @@ einops>=0.7.0               # Clean tensor operations
 safetensors>=0.4.0          # Fast model checkpointing (10x faster)
 timm>=0.9.0                 # Advanced vision utilities & optimizers
 
+# SOTA Mamba & Contrastive Learning (NEW)
+# mamba-ssm>=2.0.0          # Mamba State Space Model (GPU-only, optional)
+# causal-conv1d>=1.2.0      # Mamba dependency (GPU-only, optional)
+triton>=2.1.0               # torch.compile backend for max GPU perf
+
 # Geospatial
 h3>=3.7.6
 

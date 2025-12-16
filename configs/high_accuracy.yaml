@@ -1,134 +1,76 @@
 # ============================================================================
-# 🏆 WORLD-CLASS MODEL CONFIGURATION - RTX 4050 OPTIMIZED
+# 🏆 HIGH ACCURACY CONFIG - RTX 3050 4GB
 # ============================================================================
-# Maximum quality + Maximum speed for RTX 4050 (6GB VRAM, Ada Lovelace)
-# This configuration uses SOTA techniques from Waymo/Argoverse competitions.
+# Maximum accuracy with moderate training speed.
 
-experiment_name: "nfl_worldclass"
-description: "World-class trajectory prediction - RTX 4050 optimized"
+experiment_name: "nfl_high_accuracy"
+description: "High accuracy training for RTX 3050 4GB"
 
-# Data Configuration
+# Data
 data_dir: "."
 weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-train_split: 0.8
-val_split: 0.1
-test_split: 0.1
-validate_data: false
 radius: 20.0
 future_seq_len: 10
+history_len: 5
 
-# Model Architecture - WORLD-CLASS (maximized for 6GB VRAM)
+# Model - LARGER
 input_dim: 9
-hidden_dim: 256            # Maximum expressiveness
-num_gnn_layers: 8          # Deep network for complex patterns
-heads: 8                   # Optimal attention heads
-dropout: 0.15              # Moderate dropout
-probabilistic: false
-num_modes: 6
-droppath_rate: 0.1          # Strong stochastic depth
+hidden_dim: 256
+num_gnn_layers: 8
+heads: 8
+dropout: 0.12
+droppath_rate: 0.15
+probabilistic: true
+num_modes: 8
 use_scene_encoder: true
+temporal_encoder_type: "hybrid"
 
-# Training - SOTA STRATEGY
-batch_size: 160            # Optimal for 6GB VRAM with bf16
-learning_rate: 0.0015      # Scaled for batch size
-max_epochs: 120
-min_epochs: 30
-num_workers: 0  # Set to 0 to avoid multiprocessing deadlocks
-accumulate_grad_batches: 1
-
-# Optimization - WORLD-CLASS
-optimizer: "adamw"
-weight_decay: 0.01         # Stronger for larger model
-betas: [0.9, 0.999]
-eps: 1.0e-08
-
-# Learning Rate Scheduler - Warmup + Cosine
-lr_scheduler: "cosine_warmup"
+# Training
+batch_size: 32
+accumulate_grad_batches: 4
+learning_rate: 0.001
+max_epochs: 100
 warmup_epochs: 5
-min_lr: 1.0e-07
 
-# Loss Weights - Multi-task SOTA
+# Optimizer
+optimizer: "adamw"
+weight_decay: 0.02
+
+# Loss Weights
 trajectory_weight: 1.0
-velocity_weight: 0.4              # Increased for smoother trajectories
-acceleration_weight: 0.2          # Physics-aware
-collision_weight: 0.08            # Player separation
+velocity_weight: 0.4
+acceleration_weight: 0.2
+collision_weight: 0.08
 coverage_weight: 0.5
 
-# SOTA Contrastive Losses (NEW - 2024 techniques)
-use_social_nce: true              # Social NCE for collision avoidance
-social_nce_weight: 0.1
-social_nce_temperature: 0.1
-
-use_contrastive_loss: true        # TrajCLIP-style history-future alignment
-contrastive_weight: 0.05
-
-use_wta_loss: true                # Winner-Takes-All for multi-modal
-wta_k_best: 1
-
-use_diversity_loss: true          # Prevent mode collapse
-diversity_weight: 0.02
-diversity_min_distance: 2.0
-
-use_endpoint_focal: true          # Focal loss on final positions
+# SOTA Losses - ALL ENABLED
+use_social_nce: true
+social_nce_weight: 0.12
+use_wta_loss: true
+wta_k_best: 2
+use_diversity_loss: true
+diversity_weight: 0.025
+use_endpoint_focal: true
 endpoint_focal_weight: 0.2
-endpoint_focal_gamma: 2.0
 
-# Temporal Encoder (NEW - Mamba for efficiency)
-temporal_encoder_type: "hybrid"   # "lstm", "mamba", "bimamba", "hybrid"
-
-# Regularization - ANTI-OVERFITTING
-gradient_clip_val: 1.0
-use_augmentation: true
-use_huber_loss: true
-huber_delta: 1.0
-label_smoothing: 0.1       # Prevents overconfidence
-
-# Hardware - Auto-detected for maximum utilization
-precision: "16-mixed"  # Mixed precision for Tensor Cores
+# Hardware
+precision: "16-mixed"
 accelerator: "gpu"
-devices: 1
-strategy: "auto"
-use_torch_compile: true           # torch.compile for 2x speedup
-torch_compile_mode: "reduce-overhead"
-
-# Callbacks - BALANCED
-early_stopping_patience: 20
-early_stopping_min_delta: 0.0003
-monitor_metric: "val_ade"
-save_top_k: 5
-save_last: true
-
-# Stochastic Weight Averaging (SWA)
-swa_enabled: true
-swa_epoch_start: 0.75
-swa_lrs: 1.0e-05
-swa_annealing_epochs: 5
-
-# Experiment Tracking
-use_mlflow: false
-use_wandb: false
-use_tensorboard: true
-log_every_n_steps: 20
-
-# Paths
-checkpoint_dir: "./checkpoints"
-log_dir: "./logs"
-output_dir: "./outputs"
-
-# Reproducibility - SPEED MODE
-seed: 42
-deterministic: false
 benchmark: true
+num_workers: 2
+in_memory_cache_size: 50
 
-# Production Features
-enable_profiling: false
-export_onnx: true
-export_torchscript: true
-save_config: true
+# Callbacks
+early_stopping_patience: 15
+monitor_metric: "val_minADE"
+save_top_k: 5
 
-# Target Metrics (World-class targets)
-target_val_ade: 0.40       # Sub-0.5 yard accuracy
-target_val_fde: 0.70
-target_val_miss_rate: 0.05
-target_val_cov_acc: 0.95
+# SWA
+swa_enabled: true
+swa_epoch_start: 0.7
+swa_lrs: 5.0e-06
 
+# Targets
+target_val_ade: 0.38
+target_val_minADE: 0.30
+target_val_fde: 0.60

@@ -1,109 +1,73 @@
 # ============================================================================
-# PRODUCTION TRAINING CONFIGURATION (SOTA Edition)
+# 🎯 PRODUCTION CONFIG - BALANCED
 # ============================================================================
-# Updated with Lion optimizer, SWA, DropPath, and RTX 40 series optimizations.
+# Production-ready balance of speed and accuracy.
 
-# Experiment Metadata
-experiment_name: "nfl_production_v2"
-description: "Production training with SOTA optimizations (Lion, SWA, DropPath)"
+experiment_name: "nfl_production"
+description: "Production training - balanced speed and accuracy"
 
-# Data Configuration
+# Data
 data_dir: "."
-weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
-train_split: 0.8
-val_split: 0.1
-test_split: 0.1
+weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]  # 12 weeks
 radius: 20.0
 future_seq_len: 10
+history_len: 5
 
-# Model Architecture (SOTA)
+# Model
 input_dim: 9
-hidden_dim: 128
+hidden_dim: 256
 num_gnn_layers: 6
 heads: 8
-dropout: 0.15
-droppath_rate: 0.08      # Stabilize stochastic depth
-probabilistic: true      # Enable multi-modal decoding
-num_modes: 8             # Higher-quality multi-modality
+dropout: 0.1
+probabilistic: true
+num_modes: 6
 use_scene_encoder: true
 
-# Training Configuration
-batch_size: 64
-learning_rate: 0.0005
-max_epochs: 100
-min_epochs: 20
-num_workers: 0  # Set to 0 to avoid multiprocessing deadlocks
-accumulate_grad_batches: 2   # Effective batch = 128
-
-# Optimization (SOTA)
-optimizer: "adamw"        # Prefer stable AdamW for quality
-weight_decay: 0.05
-betas: [0.9, 0.999]
-eps: 1.0e-08
-
-# Learning Rate Scheduler
-lr_scheduler: "cosine_warmup"
+# Training
+batch_size: 40
+accumulate_grad_batches: 4
+learning_rate: 0.001
+max_epochs: 80
 warmup_epochs: 5
-min_lr: 1.0e-07
 
-# Loss Weights (Multi-task learning)
+# Optimizer
+optimizer: "adamw"
+weight_decay: 0.02
+
+# Loss Weights
 trajectory_weight: 1.0
-velocity_weight: 0.3
-acceleration_weight: 0.1
-collision_weight: 0.05
-coverage_weight: 0.4
+velocity_weight: 0.35
+acceleration_weight: 0.15
+collision_weight: 0.06
+coverage_weight: 0.45
 
-# Regularization (Enhanced)
-gradient_clip_val: 1.0
-use_augmentation: true
-use_huber_loss: true
-huber_delta: 1.0
-label_smoothing: 0.05
+# SOTA Losses
+use_social_nce: true
+social_nce_weight: 0.1
+use_wta_loss: true
+wta_k_best: 1
+use_diversity_loss: true
+diversity_weight: 0.02
+use_endpoint_focal: true
+endpoint_focal_weight: 0.15
 
-# Hardware Configuration (Auto-detected based on GPU)
-precision: "auto"  # Auto-detects: bf16-mixed (RTX 30/40, A100), 16-mixed (RTX 20), 32 (CPU/old GPUs)
+# Hardware
+precision: "16-mixed"
 accelerator: "gpu"
-devices: 1
-strategy: "auto"
+benchmark: true
+num_workers: 2
+in_memory_cache_size: 80
 
-# Callbacks (Enhanced)
-early_stopping_patience: 15
-early_stopping_min_delta: 0.0005
+# Callbacks
+early_stopping_patience: 12
 monitor_metric: "val_ade"
-save_top_k: 5
-save_last: true
+save_top_k: 3
 
-# Stochastic Weight Averaging (SWA)
+# SWA
 swa_enabled: true
-swa_epoch_start: 0.75  # Start at 75% of training
+swa_epoch_start: 0.75
 swa_lrs: 1.0e-05
-swa_annealing_epochs: 5
 
-# Experiment Tracking
-use_mlflow: false
-use_wandb: false
-use_tensorboard: true
-log_every_n_steps: 25
-
-# Paths
-checkpoint_dir: "./checkpoints"
-log_dir: "./logs"
-output_dir: "./outputs"
-
-# Reproducibility
-seed: 42
-deterministic: false     # Faster
-benchmark: true          # cuDNN autotuning
-
-# Production Features
-enable_profiling: false
-export_onnx: true
-export_torchscript: true
-save_config: true
-validate_data: false  # Faster data loading
-
-# Target Metrics (for reference, not used by trainer)
-target_val_ade: 0.50     # World-class target
-target_val_fde: 0.90
-target_val_miss_rate: 0.10
-target_val_cov_acc: 0.90
+# Targets
+target_val_ade: 0.42
+target_val_fde: 0.68

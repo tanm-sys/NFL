@@ -1,124 +1,96 @@
 # ============================================================================
-# 🏆 MAXIMUM ACCURACY CONFIG - RTX 3050 4GB OPTIMIZED
+# 🚀 MAXIMUM SPEED CONFIG - RTX 3050 4GB OPTIMIZED
 # ============================================================================
-# Pushes model capacity to the limit while staying within 4GB VRAM.
-# Uses all SOTA techniques for best trajectory prediction accuracy.
+# Fastest training while maintaining good accuracy.
+# Optimized for RTX 3050 4GB VRAM.
 
-experiment_name: "nfl_max_accuracy"
-description: "Maximum accuracy for RTX 3050 4GB - all SOTA enabled"
+experiment_name: "nfl_max_speed"
+description: "Maximum speed training for RTX 3050 4GB"
 
 # Data Configuration
 data_dir: "."
-weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+weeks: [1, 2, 3, 4, 5, 6, 7, 8, 9]  # 9 weeks for speed
 train_split: 0.8
-val_split: 0.1
-test_split: 0.1
+val_split: 0.2
 radius: 20.0
 future_seq_len: 10
 history_len: 5
 
-# ============================================================================
-# MODEL ARCHITECTURE - MAXIMUM FOR 4GB VRAM
-# ============================================================================
+# Model Architecture - BALANCED
 input_dim: 9
-hidden_dim: 256              # Sweet spot for 4GB
-num_gnn_layers: 8            # Deep network - more layers > wider
-heads: 8                     # Maximum attention heads
-dropout: 0.12                # Moderate regularization
-droppath_rate: 0.15          # Strong stochastic depth
-
-# Probabilistic Decoder
+hidden_dim: 256
+num_gnn_layers: 6              # Reduced for speed
+heads: 8
+dropout: 0.1
+droppath_rate: 0.1
 probabilistic: true
-num_modes: 8                 # More modes for trajectory diversity
-
-# Temporal Encoder
-temporal_encoder_type: "hybrid"  # Best of LSTM + attention
+num_modes: 6                   # Reduced for speed
 use_scene_encoder: true
+temporal_encoder_type: "lstm"  # Faster than hybrid
 
-# ============================================================================
-# TRAINING - OPTIMIZED FOR 4GB VRAM
-# ============================================================================
-batch_size: 24               # Reduced for larger model
-accumulate_grad_batches: 6   # Effective batch = 144
-learning_rate: 0.001         # Scaled for effective batch
-max_epochs: 150
-min_epochs: 40
+# Training - SPEED OPTIMIZED
+batch_size: 48                 # Large for GPU utilization
+accumulate_grad_batches: 3     # Effective batch = 144
+learning_rate: 0.001
+max_epochs: 50
+min_epochs: 10
 
 # Optimizer
-optimizer: "lion"            # Lion optimizer - faster convergence
+optimizer: "adamw"
 weight_decay: 0.02
-betas: [0.9, 0.99]
+betas: [0.9, 0.999]
 
 # LR Scheduler
 lr_scheduler: "cosine_warmup"
-warmup_epochs: 8
-min_lr: 1.0e-07
+warmup_epochs: 3
+min_lr: 1.0e-06
 
-# ============================================================================
-# LOSS WEIGHTS - BALANCED MULTI-TASK
-# ============================================================================
+# Loss Weights
 trajectory_weight: 1.0
-velocity_weight: 0.5
-acceleration_weight: 0.25
-collision_weight: 0.1
-coverage_weight: 0.6
+velocity_weight: 0.3
+acceleration_weight: 0.15
+collision_weight: 0.05
+coverage_weight: 0.4
 
-# SOTA Contrastive Losses
+# SOTA Losses
 use_social_nce: true
-social_nce_weight: 0.15
-social_nce_temperature: 0.07
-
-use_contrastive_loss: true
-contrastive_weight: 0.08
-
+social_nce_weight: 0.1
 use_wta_loss: true
-wta_k_best: 2               # Top-2 for better multi-modal
-
+wta_k_best: 1
 use_diversity_loss: true
-diversity_weight: 0.03
-diversity_min_distance: 2.5
-
+diversity_weight: 0.02
 use_endpoint_focal: true
-endpoint_focal_weight: 0.25
-endpoint_focal_gamma: 2.5
+endpoint_focal_weight: 0.15
 
-# ============================================================================
-# REGULARIZATION - PREVENT OVERFITTING
-# ============================================================================
-gradient_clip_val: 0.5       # Tighter clipping
+# Regularization
+gradient_clip_val: 1.0
 use_augmentation: true
 use_huber_loss: true
-huber_delta: 0.8
-label_smoothing: 0.12
+huber_delta: 1.0
+label_smoothing: 0.05
 
-# ============================================================================
-# HARDWARE - RTX 3050 4GB OPTIMIZED
-# ============================================================================
-precision: "16-mixed"        # Essential for 4GB
+# Hardware
+precision: "16-mixed"
 accelerator: "gpu"
 devices: 1
 benchmark: true
 deterministic: false
+num_workers: 2
 
-# ============================================================================
-# CALLBACKS
-# ============================================================================
-early_stopping_patience: 25
-early_stopping_min_delta: 0.0002
-monitor_metric: "val_minADE"  # Best metric for multi-modal
-save_top_k: 5
-save_last: true
+# Caching - MAXIMUM
+in_memory_cache_size: 100
+persist_cache: true
 
-# SWA for final boost
+# Callbacks
+early_stopping_patience: 8
+monitor_metric: "val_ade"
+save_top_k: 3
+
+# SWA
 swa_enabled: true
 swa_epoch_start: 0.7
-swa_lrs: 5.0e-06
-swa_annealing_epochs: 8
+swa_lrs: 1.0e-05
 
-# ============================================================================
-# TARGETS (Aggressive but achievable)
-# ============================================================================
-target_val_ade: 0.35
-target_val_minADE: 0.28
-target_val_fde: 0.55
-target_val_miss_rate: 0.03
+# Targets
+target_val_ade: 0.45
+target_val_fde: 0.75

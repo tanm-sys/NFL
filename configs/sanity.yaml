@@ -1,106 +1,41 @@
-# Quick sanity check configuration
-# Use this for rapid testing (5-10 minutes)
+# ============================================================================
+# ⚡ SANITY CHECK CONFIG - FAST TESTING
+# ============================================================================
+# Quick sanity check to verify training works.
 
-experiment_name: "nfl_sanity_check"
-description: "Quick sanity check on 1 week, 5 epochs"
+experiment_name: "nfl_sanity"
+description: "Quick sanity check"
 
-# Data Configuration
+# Data - MINIMAL
 data_dir: "."
-weeks: [1]  # Only week 1
-train_split: 0.8
-val_split: 0.2
-test_split: 0.0
-validate_data: false  # Skip validation for speed
+weeks: [1]
 radius: 20.0
 future_seq_len: 10
+history_len: 5
 
-# Model Architecture
+# Model - SMALL
 input_dim: 9
-hidden_dim: 32  # Smaller for faster training
+hidden_dim: 64
 num_gnn_layers: 2
 heads: 4
 dropout: 0.1
 probabilistic: false
-num_modes: 6
-droppath_rate: 0.0  # Disable for speed
-use_scene_encoder: false  # Disable for speed
+num_modes: 1
 
-# Training Configuration
-batch_size: 16
+# Training - FAST
+batch_size: 32
 learning_rate: 0.001
-max_epochs: 5  # Very few epochs
-min_epochs: 1
-num_workers: 0  # Set to 0 to avoid multiprocessing deadlocks
-accumulate_grad_batches: 1
+max_epochs: 2
+limit_train_batches: 20
+limit_val_batches: 5
 
-# Optimization
-optimizer: "adamw"
-weight_decay: 0.0001
-betas: [0.9, 0.999]
-eps: 1.0e-08
+# Hardware
+precision: "16-mixed"
+accelerator: "gpu"
+num_workers: 0
 
-# Learning Rate Scheduler
-lr_scheduler: "cosine_warmup"
-warmup_epochs: 1
-min_lr: 1.0e-07
-
-# Loss Weights
-trajectory_weight: 1.0
-velocity_weight: 0.3
-acceleration_weight: 0.1
-collision_weight: 0.05
-coverage_weight: 0.5
-
-# Regularization
-gradient_clip_val: 1.0
-use_augmentation: false  # Disable for speed
-use_huber_loss: false
-huber_delta: 1.0
-label_smoothing: 0.0
-
-# Hardware Configuration (Auto-detected based on GPU)
-precision: "auto"  # Auto-detects optimal precision for your hardware
-accelerator: "auto"
-devices: 1
-strategy: "auto"
-
-# Callbacks
-early_stopping_patience: 999  # Effectively disable (very high patience)
-early_stopping_min_delta: 0.0
-monitor_metric: "val_ade"
-save_top_k: 1
-save_last: false
-
-# Stochastic Weight Averaging (SWA) - Disabled for sanity
-swa_enabled: false
-swa_epoch_start: 0.75
-swa_lrs: 1.0e-05
-swa_annealing_epochs: 5
-
-# Experiment Tracking
-use_mlflow: false
-use_wandb: false
-use_tensorboard: true
-log_every_n_steps: 10
-
-# Paths
-checkpoint_dir: "./checkpoints_sanity"
-log_dir: "./logs_sanity"
-output_dir: "./outputs_sanity"
-
-# Reproducibility
-seed: 42
-deterministic: false  # Faster
-benchmark: true
-
-# Production Features
-enable_profiling: false
-export_onnx: false
-export_torchscript: false
-save_config: false
-
-# Target Metrics (for reference)
-target_val_ade: 5.0  # Relaxed for sanity check
-target_val_fde: 10.0
-target_val_miss_rate: 0.50
-target_val_cov_acc: 0.70
+# No SOTA losses for sanity check
+use_social_nce: false
+use_wta_loss: false
+use_diversity_loss: false
+use_endpoint_focal: false

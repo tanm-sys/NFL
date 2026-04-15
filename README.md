@@ -1,4 +1,4 @@
-# NFL Analytics Engine: Context-Aware Trajectory Prediction
+# NFL Analytics Engine: Context-Aware Trajectory Prediction.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.2+-ee4c2c.svg)](https://pytorch.org/)
